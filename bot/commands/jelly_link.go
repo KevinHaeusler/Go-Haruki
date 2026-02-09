@@ -128,7 +128,7 @@ func JellyLinkHandler(ctx *appctx.Context, s *discordgo.Session, i *discordgo.In
 	sess.MessageID = msg.ID
 
 	jellyLinkStore.Set(ownerID, *sess)
-	go jellyLinkExpireLoop(s, ownerID)
+	go jellyLinkExpireLoop(s, ownerID, msg.ChannelID, msg.ID)
 
 	return nil
 }
@@ -362,12 +362,20 @@ func buildJellyLinkPage(sess *jellyLinkSession) (*discordgo.MessageEmbed, []disc
 
 // ---- session storage / expiry ----
 
-func jellyLinkExpireLoop(s *discordgo.Session, ownerID string) {
+func jellyLinkExpireLoop(s *discordgo.Session, userID, channelID, messageID string) {
 	for {
-		time.Sleep(30 * time.Second)
-		sess := jellyLinkStore.Get(ownerID)
-		if sess == nil {
-			// Either expired or cleared by hand
+		time.Sleep(10 * time.Second)
+		_, expired := jellyLinkStore.GetWithExpiration(userID)
+		if expired {
+			embed := &discordgo.MessageEmbed{
+				Title:       "Aborted",
+				Description: "Session timed out after 5 minutes of inactivity.",
+				Color:       0xff0000,
+			}
+			_ = editSessionMessageSimple(s, channelID, messageID, embed, []discordgo.MessageComponent{})
+			return
+		}
+		if jellyLinkStore.Get(userID) == nil {
 			return
 		}
 	}

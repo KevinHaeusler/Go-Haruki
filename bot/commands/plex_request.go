@@ -140,7 +140,7 @@ func PlexRequestHandler(ctx *appctx.Context, s *discordgo.Session, i *discordgo.
 		MessageID:  msg.ID,
 	})
 
-	go expireSession(s, userID)
+	go expireSession(s, userID, msg.ChannelID, msg.ID)
 
 	return nil
 }
@@ -308,15 +308,26 @@ func PlexRequestAbortHandler(ctx *appctx.Context, s *discordgo.Session, i *disco
 	return editSessionMessage(s, sess, "", []*discordgo.MessageEmbed{embed}, []discordgo.MessageComponent{})
 }
 
-func expireSession(s *discordgo.Session, userID string) {
-	// Simple expiration check loop.
-	// Generic store handles TTL, but we want to update the UI on expiration.
-	// Since we don't have a callback in Store, we use a simple poll for now.
+func expireSession(s *discordgo.Session, userID, channelID, messageID string) {
 	for {
-		time.Sleep(30 * time.Second)
-		sess := requestStore.Get(userID)
-		if sess == nil {
-			// Either expired or cleared by hand
+		time.Sleep(10 * time.Second)
+		_, expired := requestStore.GetWithExpiration(userID)
+		if expired {
+			embed := &discordgo.MessageEmbed{
+				Title:       "Aborted",
+				Description: "Session timed out after 3 minutes of inactivity.",
+				Color:       0xff0000,
+			}
+			embeds := []*discordgo.MessageEmbed{embed}
+			_, _ = s.ChannelMessageEditComplex(&discordgo.MessageEdit{
+				ID:         messageID,
+				Channel:    channelID,
+				Embeds:     &embeds,
+				Components: &[]discordgo.MessageComponent{},
+			})
+			return
+		}
+		if requestStore.Get(userID) == nil {
 			return
 		}
 	}

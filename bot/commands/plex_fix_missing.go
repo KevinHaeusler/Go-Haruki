@@ -227,16 +227,31 @@ func PlexFixMissingHandler(ctx *appctx.Context, s *discordgo.Session, i *discord
 		ChannelID:     msg.ChannelID,
 		MessageID:     msg.ID,
 	})
-	go pfmExpire(s, userID)
+	go pfmExpire(s, userID, msg.ChannelID, msg.ID)
 	return nil
 }
 
-func pfmExpire(s *discordgo.Session, userID string) {
-	// Simple poll check for expiration
+func pfmExpire(s *discordgo.Session, userID, channelID, messageID string) {
 	for {
-		time.Sleep(30 * time.Second)
-		sess := pfmStore.Get(userID)
-		if sess == nil {
+		time.Sleep(10 * time.Second)
+		_, expired := pfmStore.GetWithExpiration(userID)
+		if expired {
+			embed := &discordgo.MessageEmbed{
+				Title:       "Aborted",
+				Description: "Session timed out after 3 minutes of inactivity.",
+				Color:       0xff0000,
+			}
+			embeds := []*discordgo.MessageEmbed{embed}
+			_, _ = s.ChannelMessageEditComplex(&discordgo.MessageEdit{
+				ID:         messageID,
+				Channel:    channelID,
+				Embeds:     &embeds,
+				Components: &[]discordgo.MessageComponent{},
+			})
+			return
+		}
+		// Check if it was cleared manually (sess will be nil but expired will be false)
+		if pfmStore.Get(userID) == nil {
 			return
 		}
 	}

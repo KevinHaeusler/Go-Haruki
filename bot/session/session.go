@@ -24,16 +24,22 @@ func NewStore[T any](ttl time.Duration) *Store[T] {
 }
 
 func (s *Store[T]) Get(userID string) *T {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	data, _ := s.GetWithExpiration(userID)
+	return data
+}
+
+func (s *Store[T]) GetWithExpiration(userID string) (*T, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	sess, ok := s.sessions[userID]
 	if !ok {
-		return nil
+		return nil, false
 	}
 	if time.Now().After(sess.ExpiresAt) {
-		return nil
+		delete(s.sessions, userID)
+		return nil, true
 	}
-	return &sess.Data
+	return &sess.Data, false
 }
 
 func (s *Store[T]) Set(userID string, data T) {
