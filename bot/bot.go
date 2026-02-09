@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/KevinHaeusler/go-haruki/bot/clients/radarr"
+	"github.com/KevinHaeusler/go-haruki/bot/clients/sonarr"
 	"github.com/KevinHaeusler/go-haruki/bot/clients/tautulli"
 	"github.com/bwmarrin/discordgo"
 
@@ -36,6 +38,12 @@ func Start(token, guildID string) error {
 	}
 	if cfg.TautulliURL != "" && cfg.TautulliAPIKey != "" {
 		ctx.Tautulli = tautulli.New(cfg.TautulliURL, cfg.TautulliAPIKey, httpClient)
+	}
+	if cfg.SonarrURL != "" && cfg.SonarrAPIKey != "" {
+		ctx.Sonarr = sonarr.New(cfg.SonarrURL, cfg.SonarrAPIKey, httpClient)
+	}
+	if cfg.RadarrURL != "" && cfg.RadarrAPIKey != "" {
+		ctx.Radarr = radarr.New(cfg.RadarrURL, cfg.RadarrAPIKey, httpClient)
 	}
 
 	s, err := discordgo.New("Bot " + token)
