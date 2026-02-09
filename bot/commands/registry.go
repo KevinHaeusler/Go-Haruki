@@ -16,26 +16,39 @@ var Definitions = []*discordgo.ApplicationCommand{
 	PlexRequestCommand,
 	JellyLinkCommand,
 	PlexActivityCommand,
+	PlexFixMissingCommand,
 }
 
 var Handlers = map[string]Handler{
-	HelpCommand.Name:         HelpHandler,
-	PingCommand.Name:         PingHandler,
-	PlexRequestCommand.Name:  PlexRequestHandler,
-	JellyLinkCommand.Name:    JellyLinkHandler,
-	PlexActivityCommand.Name: PlexActivityHandler,
+	HelpCommand.Name:           HelpHandler,
+	PingCommand.Name:           PingHandler,
+	PlexRequestCommand.Name:    PlexRequestHandler,
+	JellyLinkCommand.Name:      JellyLinkHandler,
+	PlexActivityCommand.Name:   PlexActivityHandler,
+	PlexFixMissingCommand.Name: PlexFixMissingHandler,
 }
 
 // ComponentHandlers CustomID -> handler
 var ComponentHandlers = map[string]ComponentHandler{
-	PlexRequestSelectID:  PlexRequestSelectHandler,
-	PlexRequestConfirmID: PlexRequestConfirmHandler,
-	PlexRequestAbortID:   PlexRequestAbortHandler,
-	PlexRequestNotifyID:  PlexRequestNotifyHandler,
-	JellyLinkSelectID:    JellyLinkSelectHandler,
-	JellyLinkAbortID:     JellyLinkAbortHandler,
-	JellyLinkPrevID:      JellyLinkPrevHandler,
-	JellyLinkNextID:      JellyLinkNextHandler,
+	PlexRequestSelectID:         PlexRequestSelectHandler,
+	PlexRequestConfirmID:        PlexRequestConfirmHandler,
+	PlexRequestAbortID:          PlexRequestAbortHandler,
+	PlexRequestNotifyID:         PlexRequestNotifyHandler,
+	JellyLinkSelectID:           JellyLinkSelectHandler,
+	JellyLinkAbortID:            JellyLinkAbortHandler,
+	JellyLinkPrevID:             JellyLinkPrevHandler,
+	JellyLinkNextID:             JellyLinkNextHandler,
+	PlexFixMissingPageNext:      PlexFixMissingMediaPagingHandler,
+	PlexFixMissingPagePrev:      PlexFixMissingMediaPagingHandler,
+	PlexFixMissingSelectMedia:   PlexFixMissingMediaSelectHandler,
+	PlexFixMissingSelectSeason:  PlexFixMissingSeasonSelectHandler,
+	PlexFixMissingEpPageNext:    PlexFixMissingEpisodePagingHandler,
+	PlexFixMissingEpPagePrev:    PlexFixMissingEpisodePagingHandler,
+	PlexFixMissingSelectEpisode: PlexFixMissingEpisodeSelectHandler,
+	PlexFixMissingSelectRelease: PlexFixMissingReleaseSelectHandler,
+	PlexFixMissingChangeRelease: PlexFixMissingChangeReleaseHandler,
+	PlexFixMissingApprove:       PlexFixMissingApproveHandler,
+	PlexFixMissingAbort:         PlexFixMissingAbortHandler,
 }
 
 func RegisterAll(s *discordgo.Session, guildID string) error {

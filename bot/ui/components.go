@@ -51,3 +51,15 @@ func ConfirmButton(customID string) discordgo.Button {
 func NotifyButton(customID string) discordgo.Button {
 	return discordgo.Button{Label: "Notify Me", Style: discordgo.PrimaryButton, CustomID: customID}
 }
+
+func SelectMenu(customID, placeholder string, opts []discordgo.SelectMenuOption) discordgo.ActionsRow {
+	return discordgo.ActionsRow{
+		Components: []discordgo.MessageComponent{
+			discordgo.SelectMenu{
+				CustomID:    customID,
+				Placeholder: placeholder,
+				Options:     opts,
+			},
+		},
+	}
+}

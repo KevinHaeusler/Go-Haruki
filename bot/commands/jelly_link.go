@@ -4,13 +4,14 @@ import (
 	"context"
 	"fmt"
 	"strconv"
-	"sync"
 	"time"
 
 	"github.com/bwmarrin/discordgo"
 
 	"github.com/KevinHaeusler/go-haruki/bot/appctx"
 	"github.com/KevinHaeusler/go-haruki/bot/clients/jellyseerr"
+	"github.com/KevinHaeusler/go-haruki/bot/session"
+	"github.com/KevinHaeusler/go-haruki/bot/ui"
 	"github.com/KevinHaeusler/go-haruki/bot/util"
 )
 
@@ -59,8 +60,7 @@ type jellyLinkSession struct {
 }
 
 var (
-	jellyLinkMu       sync.Mutex
-	jellyLinkSessions = map[string]*jellyLinkSession{} // ownerDiscordID -> session
+	jellyLinkStore = session.NewStore[jellyLinkSession](jellyLinkTTL)
 )
 
 func JellyLinkHandler(ctx *appctx.Context, s *discordgo.Session, i *discordgo.InteractionCreate) error {
@@ -70,7 +70,7 @@ func JellyLinkHandler(ctx *appctx.Context, s *discordgo.Session, i *discordgo.In
 
 	ownerID := i.Member.User.ID
 	targetID := ownerID
-	if u := getUserOption(s, i, "user"); u != nil {
+	if u := util.GetOptUser(s, i, "user"); u != nil {
 		targetID = u.ID
 	}
 
@@ -113,7 +113,6 @@ func JellyLinkHandler(ctx *appctx.Context, s *discordgo.Session, i *discordgo.In
 		IsAdmin:         isAdmin,
 		Candidates:      candidates,
 		Page:            0,
-		ExpiresAt:       time.Now().Add(jellyLinkTTL),
 	}
 
 	embed, comps := buildJellyLinkPage(sess)
@@ -128,7 +127,7 @@ func JellyLinkHandler(ctx *appctx.Context, s *discordgo.Session, i *discordgo.In
 	sess.ChannelID = msg.ChannelID
 	sess.MessageID = msg.ID
 
-	setJellyLinkSession(ownerID, sess)
+	jellyLinkStore.Set(ownerID, *sess)
 	go jellyLinkExpireLoop(s, ownerID)
 
 	return nil
@@ -182,10 +181,11 @@ func JellyLinkSelectHandler(ctx *appctx.Context, s *discordgo.Session, i *discor
 	})
 
 	ownerID := i.Member.User.ID
-	sess := getJellyLinkSession(ownerID)
-	if sess == nil || time.Now().After(sess.ExpiresAt) {
+	sess := jellyLinkStore.Get(ownerID)
+	if sess == nil {
 		return nil
 	}
+	jellyLinkStore.Touch(ownerID)
 
 	vals := i.MessageComponentData().Values
 	if len(vals) == 0 {
@@ -206,7 +206,7 @@ func JellyLinkSelectHandler(ctx *appctx.Context, s *discordgo.Session, i *discor
 			Description: "Jellyseerr returned an error: " + err.Error(),
 			Color:       0xff0000,
 		}
-		clearJellyLinkSession(ownerID)
+		jellyLinkStore.Clear(ownerID)
 		return editSessionMessageSimple(s, sess.ChannelID, sess.MessageID, embed, []discordgo.MessageComponent{})
 	}
 
@@ -219,7 +219,7 @@ func JellyLinkSelectHandler(ctx *appctx.Context, s *discordgo.Session, i *discor
 		Color: 0x00cc66,
 	}
 
-	clearJellyLinkSession(ownerID)
+	jellyLinkStore.Clear(ownerID)
 	return editSessionMessageSimple(s, sess.ChannelID, sess.MessageID, embed, []discordgo.MessageComponent{})
 }
 
@@ -228,16 +228,16 @@ func JellyLinkPrevHandler(ctx *appctx.Context, s *discordgo.Session, i *discordg
 	_ = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{Type: discordgo.InteractionResponseDeferredMessageUpdate})
 
 	ownerID := i.Member.User.ID
-	sess := getJellyLinkSession(ownerID)
-	if sess == nil || time.Now().After(sess.ExpiresAt) {
+	sess := jellyLinkStore.Get(ownerID)
+	if sess == nil {
 		return nil
 	}
+	jellyLinkStore.Touch(ownerID)
 
 	if sess.Page > 0 {
 		sess.Page--
 	}
-	sess.ExpiresAt = time.Now().Add(jellyLinkTTL)
-	setJellyLinkSession(ownerID, sess)
+	jellyLinkStore.Set(ownerID, *sess)
 
 	embed, comps := buildJellyLinkPage(sess)
 	return editSessionMessageSimple(s, sess.ChannelID, sess.MessageID, embed, comps)
@@ -248,17 +248,17 @@ func JellyLinkNextHandler(ctx *appctx.Context, s *discordgo.Session, i *discordg
 	_ = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{Type: discordgo.InteractionResponseDeferredMessageUpdate})
 
 	ownerID := i.Member.User.ID
-	sess := getJellyLinkSession(ownerID)
-	if sess == nil || time.Now().After(sess.ExpiresAt) {
+	sess := jellyLinkStore.Get(ownerID)
+	if sess == nil {
 		return nil
 	}
+	jellyLinkStore.Touch(ownerID)
 
 	maxPage := (len(sess.Candidates) - 1) / jellyLinkPageSize
 	if sess.Page < maxPage {
 		sess.Page++
 	}
-	sess.ExpiresAt = time.Now().Add(jellyLinkTTL)
-	setJellyLinkSession(ownerID, sess)
+	jellyLinkStore.Set(ownerID, *sess)
 
 	embed, comps := buildJellyLinkPage(sess)
 	return editSessionMessageSimple(s, sess.ChannelID, sess.MessageID, embed, comps)
@@ -269,7 +269,7 @@ func JellyLinkAbortHandler(ctx *appctx.Context, s *discordgo.Session, i *discord
 	_ = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{Type: discordgo.InteractionResponseDeferredMessageUpdate})
 
 	ownerID := i.Member.User.ID
-	sess := getJellyLinkSession(ownerID)
+	sess := jellyLinkStore.Get(ownerID)
 	if sess == nil {
 		return nil
 	}
@@ -284,7 +284,7 @@ func JellyLinkAbortHandler(ctx *appctx.Context, s *discordgo.Session, i *discord
 		Description: "Link session aborted.",
 		Color:       0x999999,
 	}
-	clearJellyLinkSession(ownerID)
+	jellyLinkStore.Clear(ownerID)
 	return editSessionMessageSimple(s, sess.ChannelID, sess.MessageID, embed, []discordgo.MessageComponent{})
 }
 
@@ -330,9 +330,9 @@ func buildJellyLinkPage(sess *jellyLinkSession) (*discordgo.MessageEmbed, []disc
 		}
 
 		opts = append(opts, discordgo.SelectMenuOption{
-			Label:       truncate(label, 100),
+			Label:       ui.Truncate(label, 100),
 			Value:       strconv.Itoa(u.ID),
-			Description: truncate(desc, 100),
+			Description: ui.Truncate(desc, 100),
 		})
 	}
 
@@ -364,55 +364,13 @@ func buildJellyLinkPage(sess *jellyLinkSession) (*discordgo.MessageEmbed, []disc
 
 func jellyLinkExpireLoop(s *discordgo.Session, ownerID string) {
 	for {
-		sess := getJellyLinkSession(ownerID)
+		time.Sleep(30 * time.Second)
+		sess := jellyLinkStore.Get(ownerID)
 		if sess == nil {
+			// Either expired or cleared by hand
 			return
 		}
-
-		wait := time.Until(sess.ExpiresAt)
-		if wait <= 0 {
-			clearJellyLinkSession(ownerID)
-
-			embed := &discordgo.MessageEmbed{
-				Title:       "Session expired",
-				Description: "Run `/jelly-link` again.",
-				Color:       0x999999,
-			}
-			_ = editSessionMessageSimple(s, sess.ChannelID, sess.MessageID, embed, []discordgo.MessageComponent{})
-			return
-		}
-
-		time.Sleep(wait)
 	}
-}
-
-func getJellyLinkSession(ownerID string) *jellyLinkSession {
-	jellyLinkMu.Lock()
-	defer jellyLinkMu.Unlock()
-	return jellyLinkSessions[ownerID]
-}
-
-func setJellyLinkSession(ownerID string, sess *jellyLinkSession) {
-	jellyLinkMu.Lock()
-	defer jellyLinkMu.Unlock()
-	jellyLinkSessions[ownerID] = sess
-}
-
-func clearJellyLinkSession(ownerID string) {
-	jellyLinkMu.Lock()
-	defer jellyLinkMu.Unlock()
-	delete(jellyLinkSessions, ownerID)
-}
-
-// ---- tiny helpers local to this file ----
-
-func getUserOption(s *discordgo.Session, i *discordgo.InteractionCreate, name string) *discordgo.User {
-	for _, o := range i.ApplicationCommandData().Options {
-		if o.Name == name {
-			return o.UserValue(s)
-		}
-	}
-	return nil
 }
 
 func editSessionMessageSimple(s *discordgo.Session, channelID, messageID string, embed *discordgo.MessageEmbed, comps []discordgo.MessageComponent) error {
@@ -424,15 +382,4 @@ func editSessionMessageSimple(s *discordgo.Session, channelID, messageID string,
 		Components: &comps, // empty slice clears components
 	})
 	return err
-}
-
-func truncate(s string, n int) string {
-	rs := []rune(s)
-	if len(rs) <= n {
-		return s
-	}
-	if n <= 1 {
-		return "…"
-	}
-	return string(rs[:n-1]) + "…"
 }

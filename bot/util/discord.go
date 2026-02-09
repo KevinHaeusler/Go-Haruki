@@ -12,6 +12,16 @@ func GetOptString(i *discordgo.InteractionCreate, name string) string {
 	return ""
 }
 
+// GetOptUser returns the user object of a slash command option by name.
+func GetOptUser(s *discordgo.Session, i *discordgo.InteractionCreate, name string) *discordgo.User {
+	for _, o := range i.ApplicationCommandData().Options {
+		if o.Name == name {
+			return o.UserValue(s)
+		}
+	}
+	return nil
+}
+
 // UserHasRole checks if the invoking member has a role ID.
 func UserHasRole(i *discordgo.InteractionCreate, roleID string) bool {
 	if i.Member == nil {

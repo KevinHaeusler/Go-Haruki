@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/KevinHaeusler/go-haruki/bot/clients/tautulli"
@@ -129,4 +130,102 @@ func nonEmptyAny(vals ...string) string {
 		}
 	}
 	return "—"
+}
+
+func PlexFixMissingMediaEmbed(page, totalPages int) *discordgo.MessageEmbed {
+	return &discordgo.MessageEmbed{
+		Title:       "Select Media",
+		Description: fmt.Sprintf("Page %d of %d", page, totalPages),
+	}
+}
+
+func PlexFixMissingSeasonEmbed() *discordgo.MessageEmbed {
+	return &discordgo.MessageEmbed{
+		Title:       "Select Season",
+		Description: "Select season to inspect",
+	}
+}
+
+func PlexFixMissingEpisodeEmbed(page, totalPages int) *discordgo.MessageEmbed {
+	return &discordgo.MessageEmbed{
+		Title:       "Select Episode",
+		Description: fmt.Sprintf("Page %d of %d", page, totalPages),
+	}
+}
+
+func PlexFixMissingReleaseEmbed(isMovie bool) *discordgo.MessageEmbed {
+	title := "Select Release"
+	if isMovie {
+		title = "Select Movie Release"
+	}
+	return &discordgo.MessageEmbed{
+		Title:       title,
+		Description: "Choose a release to download",
+	}
+}
+
+func PlexFixMissingReleaseInfoEmbed(rel map[string]any) *discordgo.MessageEmbed {
+	title, _ := rel["title"].(string)
+	if title == "" {
+		if mts, ok := rel["movieTitles"].([]any); ok && len(mts) > 0 {
+			title, _ = mts[0].(string)
+		}
+	}
+	embed := &discordgo.MessageEmbed{Title: "Release Info", Description: title}
+
+	// quality
+	if q, ok := rel["quality"].(map[string]any); ok {
+		if qq, ok := q["quality"].(map[string]any); ok {
+			if name, ok := qq["name"].(string); ok {
+				embed.Fields = append(embed.Fields, &discordgo.MessageEmbedField{Name: "Quality", Value: name, Inline: true})
+			}
+		}
+	}
+
+	if size, ok := rel["size"].(float64); ok {
+		embed.Fields = append(embed.Fields, &discordgo.MessageEmbedField{Name: "Size", Value: fmt.Sprintf("%.2f GB", size/(1024*1024*1024)), Inline: true})
+	}
+
+	if indexer, ok := rel["indexer"].(string); ok && indexer != "" {
+		embed.Fields = append(embed.Fields, &discordgo.MessageEmbedField{Name: "Indexer", Value: indexer, Inline: true})
+	}
+
+	if langs, ok := rel["languages"].([]any); ok {
+		ls := []string{}
+		for _, l := range langs {
+			if m, ok := l.(map[string]any); ok {
+				if n, ok := m["name"].(string); ok {
+					ls = append(ls, n)
+				}
+			}
+		}
+		if len(ls) > 0 {
+			embed.Fields = append(embed.Fields, &discordgo.MessageEmbedField{Name: "Languages", Value: strings.Join(ls, ", "), Inline: true})
+		}
+	}
+
+	if sc, ok := rel["customFormatScore"].(float64); ok {
+		embed.Fields = append(embed.Fields, &discordgo.MessageEmbedField{Name: "Score", Value: fmt.Sprintf("%.0f", sc), Inline: true})
+	}
+
+	if rjs, ok := rel["rejections"].([]any); ok && len(rjs) > 0 {
+		rs := []string{}
+		for _, r := range rjs {
+			if v, ok := r.(string); ok {
+				rs = append(rs, v)
+			}
+		}
+		if len(rs) > 0 {
+			embed.Fields = append(embed.Fields, &discordgo.MessageEmbedField{Name: "Rejections", Value: strings.Join(rs, "\n"), Inline: false})
+		}
+	}
+
+	return embed
+}
+
+func PlexFixMissingDownloadStartedEmbed(title string) *discordgo.MessageEmbed {
+	return &discordgo.MessageEmbed{
+		Title:       "Download Started",
+		Description: fmt.Sprintf("Downloading: %s", title),
+	}
 }

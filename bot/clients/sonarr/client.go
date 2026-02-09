@@ -40,3 +40,16 @@ func (c *Client) GetSystemStatus(ctx context.Context) (*SystemStatus, error) {
 	}
 	return &out, nil
 }
+
+func (c *Client) apiURL(path string) string {
+	p := strings.TrimLeft(path, "/")
+	return fmt.Sprintf("%s/api/v3/%s", c.BaseURL, p)
+}
+
+func (c *Client) Get(ctx context.Context, path string, out any) error {
+	return c.HTTP.DoJSON(ctx, "GET", c.apiURL(path), c.headers(), nil, out)
+}
+
+func (c *Client) Post(ctx context.Context, path string, body any, out any) error {
+	return c.HTTP.DoJSON(ctx, "POST", c.apiURL(path), c.headers(), body, out)
+}
