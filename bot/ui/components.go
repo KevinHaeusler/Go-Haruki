@@ -51,10 +51,3 @@ func ConfirmButton(customID string) discordgo.Button {
 func NotifyButton(customID string) discordgo.Button {
 	return discordgo.Button{Label: "Notify Me", Style: discordgo.PrimaryButton, CustomID: customID}
 }
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}

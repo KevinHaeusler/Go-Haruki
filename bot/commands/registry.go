@@ -26,7 +26,7 @@ var Handlers = map[string]Handler{
 	PlexActivityCommand.Name: PlexActivityHandler,
 }
 
-// CustomID -> handler
+// ComponentHandlers CustomID -> handler
 var ComponentHandlers = map[string]ComponentHandler{
 	PlexRequestSelectID:  PlexRequestSelectHandler,
 	PlexRequestConfirmID: PlexRequestConfirmHandler,

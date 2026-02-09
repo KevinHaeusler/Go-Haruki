@@ -6,6 +6,8 @@ import (
 
 	"github.com/KevinHaeusler/go-haruki/bot/clients/jellyseerr"
 	"github.com/bwmarrin/discordgo"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 const (
@@ -72,6 +74,7 @@ func JellyAlreadyRequestedEmbed(d jellyseerr.MediaDetail, mediaType string) *dis
 }
 
 func JellyAvailabilityEmbed(d jellyseerr.MediaDetail, mediaType string, status int) *discordgo.MessageEmbed {
+	_ = mediaType
 	poster := MissingPosterURL
 	if d.PosterPath != "" {
 		poster = TMDBImageURL + d.PosterPath
@@ -144,7 +147,7 @@ func JellyRequestSentEmbed(d jellyseerr.MediaDetail, mediaType, requester string
 		Description: Truncate(d.Overview, 4000),
 		Thumbnail:   &discordgo.MessageEmbedThumbnail{URL: poster},
 		Color:       0x9c5db3,
-		Author:      &discordgo.MessageEmbedAuthor{Name: fmt.Sprintf("%s Request Sent", strings.Title(mediaType))},
+		Author:      &discordgo.MessageEmbedAuthor{Name: fmt.Sprintf("%s Request Sent", cases.Title(language.English).String(mediaType))},
 		Fields: []*discordgo.MessageEmbedField{
 			{Name: "Requested By", Value: requester, Inline: true},
 			{Name: "Request Status", Value: "Processing", Inline: true},

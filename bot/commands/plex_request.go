@@ -17,16 +17,15 @@ import (
 )
 
 const (
-	// Required role to use /plex-request
+	// PlexRoleID Required role to use /plex-request
 	PlexRoleID = "1228676841057816707"
 
-	// Component custom IDs
 	PlexRequestSelectID  = "plex_request_select"
 	PlexRequestConfirmID = "plex_request_confirm"
 	PlexRequestAbortID   = "plex_request_abort"
 	PlexRequestNotifyID  = "plex_request_notify"
 
-	// Session TTL
+	// PlexSessionTTL Session TTL
 	PlexSessionTTL = 180 * time.Second
 )
 
