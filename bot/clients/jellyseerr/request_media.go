@@ -6,7 +6,6 @@ import (
 )
 
 // RequestMediaResponse is the response shape we need (requestCount).
-// Expand it later if you want more fields.
 type RequestMediaResponse struct {
 	RequestedBy struct {
 		RequestCount int `json:"requestCount"`

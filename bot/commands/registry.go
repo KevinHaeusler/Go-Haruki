@@ -15,13 +15,15 @@ var Definitions = []*discordgo.ApplicationCommand{
 	PingCommand,
 	PlexRequestCommand,
 	JellyLinkCommand,
+	PlexActivityCommand,
 }
 
 var Handlers = map[string]Handler{
-	HelpCommand.Name:        HelpHandler,
-	PingCommand.Name:        PingHandler,
-	PlexRequestCommand.Name: PlexRequestHandler,
-	JellyLinkCommand.Name:   JellyLinkHandler,
+	HelpCommand.Name:         HelpHandler,
+	PingCommand.Name:         PingHandler,
+	PlexRequestCommand.Name:  PlexRequestHandler,
+	JellyLinkCommand.Name:    JellyLinkHandler,
+	PlexActivityCommand.Name: PlexActivityHandler,
 }
 
 // CustomID -> handler

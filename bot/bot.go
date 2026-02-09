@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/KevinHaeusler/go-haruki/bot/clients/tautulli"
 	"github.com/bwmarrin/discordgo"
 
 	"github.com/KevinHaeusler/go-haruki/bot/appctx"
@@ -32,6 +33,9 @@ func Start(token, guildID string) error {
 
 	if cfg.JellyseerrURL != "" && cfg.JellyseerrAPIKey != "" {
 		ctx.Jelly = jellyseerr.New(cfg.JellyseerrURL, cfg.JellyseerrAPIKey, httpClient)
+	}
+	if cfg.TautulliURL != "" && cfg.TautulliAPIKey != "" {
+		ctx.Tautulli = tautulli.New(cfg.TautulliURL, cfg.TautulliAPIKey, httpClient)
 	}
 
 	s, err := discordgo.New("Bot " + token)

@@ -257,7 +257,7 @@ func PlexRequestConfirmHandler(ctx *appctx.Context, s *discordgo.Session, i *dis
 		return editSessionMessage(s, sess, "", []*discordgo.MessageEmbed{embed}, []discordgo.MessageComponent{})
 	}
 
-	overseerrUserID, err := ctx.Jelly.DiscordUserToOverseerrUserID(callCtx, userID)
+	overseerrUserID, err := ctx.Jelly.DiscordUserToJellyseerrUserID(callCtx, userID)
 	if err != nil {
 		return editSessionMessage(s, sess, "Failed to link your Discord ID in Overseerr.", nil, nil)
 	}
@@ -376,7 +376,7 @@ func PlexRequestNotifyHandler(ctx *appctx.Context, s *discordgo.Session, i *disc
 	callCtx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
 	defer cancel()
 
-	overID, err := ctx.Jelly.DiscordUserToOverseerrUserID(callCtx, userID)
+	overID, err := ctx.Jelly.DiscordUserToJellyseerrUserID(callCtx, userID)
 	if err != nil || overID == 0 {
 		embed := &discordgo.MessageEmbed{
 			Title:       "Not linked",

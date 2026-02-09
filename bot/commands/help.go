@@ -19,7 +19,8 @@ func HelpHandler(ctx *appctx.Context, s *discordgo.Session, i *discordgo.Interac
 		Fields: []*discordgo.MessageEmbedField{
 			{Name: "/help", Value: "Show this help message"},
 			{Name: "/ping", Value: "Check if the bot is online"},
-			{Name: "/jellyseerr search", Value: "Search Jellyseerr for a movie or TV show"},
+			{Name: "/plex-request <mediaType> <media>", Value: "Search Jellyseerr for a movie or TV show"},
+			{Name: "/jelly-link", Value: "Link your Discord account to a Jellyseerr user"},
 		},
 	}
 

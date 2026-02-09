@@ -18,7 +18,7 @@ type userDetailResp struct {
 	} `json:"settings"`
 }
 
-func (c *Client) DiscordUserToOverseerrUserID(ctx context.Context, discordUserID string) (int, error) {
+func (c *Client) DiscordUserToJellyseerrUserID(ctx context.Context, discordUserID string) (int, error) {
 	const take = 100
 
 	for skip := 0; skip < 2000; skip += take { // safety cap

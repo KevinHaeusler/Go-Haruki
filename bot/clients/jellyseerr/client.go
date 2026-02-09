@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/url"
-	"strconv"
 	"strings"
 
 	"github.com/KevinHaeusler/go-haruki/bot/httpx"
@@ -204,11 +203,4 @@ func (d MediaDetail) RequesterSummary() (string, []string) {
 	}
 
 	return requester, watchers
-}
-
-/* ---------- small helper ---------- */
-
-func atoi(s string) int {
-	i, _ := strconv.Atoi(s)
-	return i
 }

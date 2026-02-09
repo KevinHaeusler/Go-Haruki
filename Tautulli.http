@@ -1,0 +1,1 @@
+GET {{TAUTULLI_URL}}/api/v2?apikey={{TAUTULLI_API_KEY}}&cmd=get_activity
