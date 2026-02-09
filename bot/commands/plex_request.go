@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/bwmarrin/discordgo"
 
 	"github.com/KevinHaeusler/go-haruki/bot/appctx"
 	"github.com/KevinHaeusler/go-haruki/bot/clients/jellyseerr"
+	"github.com/KevinHaeusler/go-haruki/bot/session"
 	"github.com/KevinHaeusler/go-haruki/bot/ui"
 	"github.com/KevinHaeusler/go-haruki/bot/util"
 )
@@ -61,14 +61,12 @@ type requestSession struct {
 	Results    []jellyseerr.MediaSummary
 	SelectedID int
 
-	ExpiresAt time.Time
 	ChannelID string
 	MessageID string
 }
 
 var (
-	sessionsMu sync.Mutex
-	sessions   = map[string]*requestSession{} // userID -> session
+	requestStore = session.NewStore[requestSession](PlexSessionTTL)
 )
 
 // ---- slash handler ----
@@ -132,13 +130,12 @@ func PlexRequestHandler(ctx *appctx.Context, s *discordgo.Session, i *discordgo.
 	}
 
 	userID := i.Member.User.ID
-	setSession(userID, &requestSession{
+	requestStore.Set(userID, requestSession{
 		UserID:     userID,
 		MediaType:  mt,
 		Query:      q,
 		Results:    results,
 		SelectedID: 0,
-		ExpiresAt:  time.Now().Add(PlexSessionTTL),
 		ChannelID:  msg.ChannelID,
 		MessageID:  msg.ID,
 	})
@@ -157,12 +154,11 @@ func PlexRequestSelectHandler(ctx *appctx.Context, s *discordgo.Session, i *disc
 	})
 
 	userID := i.Member.User.ID
-	sess := getSession(userID)
-	if sess == nil || time.Now().After(sess.ExpiresAt) {
+	sess := requestStore.Get(userID)
+	if sess == nil {
 		return nil
 	}
-	sess.ExpiresAt = time.Now().Add(PlexSessionTTL)
-	setSession(userID, sess)
+	requestStore.Touch(userID)
 
 	vals := i.MessageComponentData().Values
 	if len(vals) == 0 {
@@ -175,7 +171,7 @@ func PlexRequestSelectHandler(ctx *appctx.Context, s *discordgo.Session, i *disc
 	}
 
 	sess.SelectedID = selectedID
-	setSession(userID, sess)
+	requestStore.Set(userID, *sess)
 
 	callCtx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
 	defer cancel()
@@ -204,12 +200,11 @@ func PlexRequestConfirmHandler(ctx *appctx.Context, s *discordgo.Session, i *dis
 	})
 
 	userID := i.Member.User.ID
-	sess := getSession(userID)
-	if sess == nil || time.Now().After(sess.ExpiresAt) || sess.SelectedID == 0 {
+	sess := requestStore.Get(userID)
+	if sess == nil {
 		return nil
 	}
-	sess.ExpiresAt = time.Now().Add(PlexSessionTTL)
-	setSession(userID, sess)
+	requestStore.Touch(userID)
 
 	callCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
@@ -251,7 +246,7 @@ func PlexRequestConfirmHandler(ctx *appctx.Context, s *discordgo.Session, i *dis
 
 	// 5 = already available -> terminal
 	if status == 5 {
-		clearSession(userID)
+		requestStore.Clear(userID)
 		embed := ui.JellyAvailabilityEmbed(detail, sess.MediaType, status)
 		return editSessionMessage(s, sess, "", []*discordgo.MessageEmbed{embed}, []discordgo.MessageComponent{})
 	}
@@ -265,7 +260,7 @@ func PlexRequestConfirmHandler(ctx *appctx.Context, s *discordgo.Session, i *dis
 	}
 
 	if detail.HasRequester(overseerrUserID) {
-		clearSession(userID)
+		requestStore.Clear(userID)
 		embed := &discordgo.MessageEmbed{
 			Title:       "ℹ️ Already Requested",
 			Description: "You’ve already requested this media.",
@@ -278,7 +273,7 @@ func PlexRequestConfirmHandler(ctx *appctx.Context, s *discordgo.Session, i *dis
 		return editSessionMessage(s, sess, "Request failed: "+err.Error(), nil, nil)
 	}
 
-	clearSession(userID)
+	requestStore.Clear(userID)
 
 	total := resp.RequestedBy.RequestCount + 1
 	embed := ui.JellyRequestSentEmbed(detail, sess.MediaType, i.Member.User.Username, total)
@@ -294,7 +289,7 @@ func PlexRequestAbortHandler(ctx *appctx.Context, s *discordgo.Session, i *disco
 	})
 
 	userID := i.Member.User.ID
-	sess := getSession(userID)
+	sess := requestStore.Get(userID)
 	if sess == nil {
 		return nil
 	}
@@ -303,7 +298,7 @@ func PlexRequestAbortHandler(ctx *appctx.Context, s *discordgo.Session, i *disco
 		return nil
 	}
 
-	clearSession(userID)
+	requestStore.Clear(userID)
 
 	embed := &discordgo.MessageEmbed{
 		Title:       "Aborted",
@@ -314,26 +309,16 @@ func PlexRequestAbortHandler(ctx *appctx.Context, s *discordgo.Session, i *disco
 }
 
 func expireSession(s *discordgo.Session, userID string) {
+	// Simple expiration check loop.
+	// Generic store handles TTL, but we want to update the UI on expiration.
+	// Since we don't have a callback in Store, we use a simple poll for now.
 	for {
-		sess := getSession(userID)
+		time.Sleep(30 * time.Second)
+		sess := requestStore.Get(userID)
 		if sess == nil {
+			// Either expired or cleared by hand
 			return
 		}
-
-		wait := time.Until(sess.ExpiresAt)
-		if wait <= 0 {
-			clearSession(userID)
-
-			embed := &discordgo.MessageEmbed{
-				Title:       "Session expired",
-				Description: "Run `/plex-request` again.",
-			}
-
-			_ = editSessionMessage(s, sess, "", []*discordgo.MessageEmbed{embed}, []discordgo.MessageComponent{})
-			return
-		}
-
-		time.Sleep(wait)
 	}
 }
 
@@ -364,13 +349,12 @@ func PlexRequestNotifyHandler(ctx *appctx.Context, s *discordgo.Session, i *disc
 	})
 
 	userID := i.Member.User.ID
-	sess := getSession(userID)
+	sess := requestStore.Get(userID)
 
-	if sess == nil || time.Now().After(sess.ExpiresAt) || sess.SelectedID == 0 {
+	if sess == nil || sess.SelectedID == 0 {
 		return nil
 	}
-	sess.ExpiresAt = time.Now().Add(PlexSessionTTL)
-	setSession(userID, sess)
+	requestStore.Touch(userID)
 
 	callCtx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
 	defer cancel()
@@ -381,7 +365,7 @@ func PlexRequestNotifyHandler(ctx *appctx.Context, s *discordgo.Session, i *disc
 			Title:       "Not linked",
 			Description: "Your Discord ID is not linked in Jellyseerr.",
 		}
-		clearSession(userID)
+		requestStore.Clear(userID)
 		return editSessionMessage(s, sess, "", []*discordgo.MessageEmbed{embed}, []discordgo.MessageComponent{})
 	}
 
@@ -395,7 +379,7 @@ func PlexRequestNotifyHandler(ctx *appctx.Context, s *discordgo.Session, i *disc
 			Title:       "ℹ️ Already Requested",
 			Description: "You’ll be notified (already on the watcher list).",
 		}
-		clearSession(userID)
+		requestStore.Clear(userID)
 		return editSessionMessage(s, sess, "", []*discordgo.MessageEmbed{embed}, []discordgo.MessageComponent{})
 	}
 
@@ -409,26 +393,6 @@ func PlexRequestNotifyHandler(ctx *appctx.Context, s *discordgo.Session, i *disc
 		Description: "You'll be notified when this item becomes available.",
 	}
 
-	clearSession(userID)
+	requestStore.Clear(userID)
 	return editSessionMessage(s, sess, "", []*discordgo.MessageEmbed{embed}, []discordgo.MessageComponent{})
-}
-
-// ---- session map helpers ----
-
-func getSession(userID string) *requestSession {
-	sessionsMu.Lock()
-	defer sessionsMu.Unlock()
-	return sessions[userID]
-}
-
-func setSession(userID string, sess *requestSession) {
-	sessionsMu.Lock()
-	defer sessionsMu.Unlock()
-	sessions[userID] = sess
-}
-
-func clearSession(userID string) {
-	sessionsMu.Lock()
-	defer sessionsMu.Unlock()
-	delete(sessions, userID)
 }
