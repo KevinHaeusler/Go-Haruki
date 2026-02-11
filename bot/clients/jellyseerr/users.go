@@ -40,6 +40,32 @@ type UserDetail struct {
 	} `json:"settings"`
 }
 
+type NotificationSettings struct {
+	NotificationTypes struct {
+		Discord    int `json:"discord"`
+		Email      int `json:"email"`
+		Pushbullet int `json:"pushbullet"`
+		Pushover   int `json:"pushover"`
+		Slack      int `json:"slack"`
+		Telegram   int `json:"telegram"`
+		Webhook    int `json:"webhook"`
+		Webpush    int `json:"webpush"`
+	} `json:"notificationTypes"`
+	EmailEnabled             bool   `json:"emailEnabled"`
+	PGPKey                   string `json:"pgpKey,omitempty"`
+	DiscordEnabled           bool   `json:"discordEnabled"`
+	DiscordEnabledTypes      int    `json:"discordEnabledTypes"`
+	DiscordID                string `json:"discordId,omitempty"`
+	PushbulletAccessToken    string `json:"pushbulletAccessToken,omitempty"`
+	PushoverApplicationToken string `json:"pushoverApplicationToken,omitempty"`
+	PushoverUserKey          string `json:"pushoverUserKey,omitempty"`
+	PushoverSound            string `json:"pushoverSound,omitempty"`
+	TelegramEnabled          bool   `json:"telegramEnabled"`
+	TelegramBotUsername      string `json:"telegramBotUsername,omitempty"`
+	TelegramChatId           string `json:"telegramChatId,omitempty"`
+	TelegramSendSilently     bool   `json:"telegramSendSilently"`
+}
+
 func (c *Client) GetUserDetail(ctx context.Context, id int) (UserDetail, error) {
 	u := fmt.Sprintf("%s/api/v1/user/%d", c.BaseURL, id)
 
@@ -64,4 +90,19 @@ func (c *Client) UpdateUserDiscordID(ctx context.Context, jellyUserID int, disco
 	// Some servers return the updated settings; we don't need it.
 	var ignore any
 	return c.HTTP.DoJSON(ctx, "PUT", u, c.headers(), body, &ignore)
+}
+
+func (c *Client) UpdateUserNotificationSettings(ctx context.Context, jellyUserID int, settings NotificationSettings) error {
+	u := fmt.Sprintf("%s/api/v1/user/%d/settings/notifications", c.BaseURL, jellyUserID)
+
+	var ignore any
+	return c.HTTP.DoJSON(ctx, "POST", u, c.headers(), settings, &ignore)
+}
+
+func GetUserName(c *Client, id int) (string, error) {
+	detail, err := c.GetUserDetail(context.Background(), id)
+	if err != nil {
+		return "", err
+	}
+	return detail.DisplayName, nil
 }

@@ -195,12 +195,21 @@ func JellyLinkSelectHandler(ctx *appctx.Context, s *discordgo.Session, i *discor
 	if err != nil {
 		return nil
 	}
+	jellyUserName, err := jellyseerr.GetUserName(ctx.Jelly, jellyUserID)
+	if err != nil {
+		return nil
+	}
 
 	callCtx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
-	// Update Jellyseerr user settings.discordId
-	if err := ctx.Jelly.UpdateUserDiscordID(callCtx, jellyUserID, sess.TargetDiscordID); err != nil {
+	// Update Jellyseerr user settings.discordId and enable discord notifications
+	settings := jellyseerr.NotificationSettings{
+		DiscordID:      sess.TargetDiscordID,
+		DiscordEnabled: true,
+	}
+	// Default notification types to 0 as in example
+	if err := ctx.Jelly.UpdateUserNotificationSettings(callCtx, jellyUserID, settings); err != nil {
 		embed := &discordgo.MessageEmbed{
 			Title:       "Link failed",
 			Description: "Jellyseerr returned an error: " + err.Error(),
@@ -213,8 +222,8 @@ func JellyLinkSelectHandler(ctx *appctx.Context, s *discordgo.Session, i *discor
 	embed := &discordgo.MessageEmbed{
 		Title: "Linked ✅",
 		Description: fmt.Sprintf(
-			"Assigned Discord ID `%s` to Jellyseerr user ID `%d`.\n\nIf this is wrong, run `/jelly-link` again to reassign.",
-			sess.TargetDiscordID, jellyUserID,
+			"Assigned Discord ID `%s` to Jellyseerr user ID `%d` user name: `%s`.\n\nIf this is wrong, run `/jelly-link` again to reassign.",
+			sess.TargetDiscordID, jellyUserID, jellyUserName,
 		),
 		Color: 0x00cc66,
 	}
