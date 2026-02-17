@@ -71,10 +71,17 @@ func Start(token, guildID string) error {
 
 	// Optionally start webhook server
 	if cfg.WebhookAddr != "" && cfg.WebhookPath != "" {
-		server, err := webhooks.Start(cfg.WebhookAddr, cfg.WebhookPath, func(p webhooks.NotificationPayload) {
-			if cfg.DiscordChannelID != "" && Session != nil {
+		server, err := webhooks.Start(cfg.WebhookAddr, cfg.WebhookPath, cfg.WebhookAuthToken, func(p webhooks.NotificationPayload) {
+			if Session == nil {
+				return
+			}
+			channelID := cfg.DiscordChannelID
+			if p.DiscordChannelID != "" {
+				channelID = p.DiscordChannelID
+			}
+			if channelID != "" {
 				content := fmt.Sprintf("%s: %s", p.Subject, p.Message)
-				_, _ = Session.ChannelMessageSend(cfg.DiscordChannelID, content)
+				_, _ = Session.ChannelMessageSend(channelID, content)
 			}
 		})
 		if err != nil {
