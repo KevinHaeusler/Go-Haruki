@@ -1,6 +1,7 @@
 package bot
 
 import (
+	"context"
 	"fmt"
 	"log"
 
@@ -16,9 +17,11 @@ import (
 	"github.com/KevinHaeusler/go-haruki/bot/config"
 	"github.com/KevinHaeusler/go-haruki/bot/handlers"
 	"github.com/KevinHaeusler/go-haruki/bot/httpx"
+	"github.com/KevinHaeusler/go-haruki/bot/webhooks"
 )
 
 var Session *discordgo.Session
+var webhookServerStop func()
 
 func Start(token, guildID string) error {
 	cfg, err := config.Load()
@@ -66,11 +69,34 @@ func Start(token, guildID string) error {
 		return fmt.Errorf("register commands: %w", err)
 	}
 
+	// Optionally start webhook server
+	if cfg.WebhookAddr != "" && cfg.WebhookPath != "" {
+		server, err := webhooks.Start(cfg.WebhookAddr, cfg.WebhookPath, func(p webhooks.NotificationPayload) {
+			if cfg.DiscordChannelID != "" && Session != nil {
+				content := fmt.Sprintf("%s: %s", p.Subject, p.Message)
+				_, _ = Session.ChannelMessageSend(cfg.DiscordChannelID, content)
+			}
+		})
+		if err != nil {
+			_ = Session.Close()
+			Session = nil
+			return fmt.Errorf("start webhook server: %w", err)
+		}
+		webhookServerStop = func() {
+			_ = server.Shutdown(context.Background())
+		}
+		log.Printf("Webhook listening on %s%s", cfg.WebhookAddr, cfg.WebhookPath)
+	}
+
 	log.Println("Bot running as:", s.State.User.Username)
 	return nil
 }
 
 func Stop() {
+	if webhookServerStop != nil {
+		webhookServerStop()
+		webhookServerStop = nil
+	}
 	if Session != nil {
 		_ = Session.Close()
 		Session = nil

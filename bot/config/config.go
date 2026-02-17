@@ -17,6 +17,16 @@ type Config struct {
 
 	TautulliURL    string
 	TautulliAPIKey string
+
+	// Optional webhook server to receive external notifications
+	WebhookAddr string // e.g. ":8080"
+	WebhookPath string // e.g. "/webhook"
+
+	// Optional: where to post incoming notifications
+	DiscordChannelID string
+
+	// Optional: authorization token for incoming webhooks
+	WebhookAuthToken string
 }
 
 func Load() (Config, error) {
@@ -29,6 +39,10 @@ func Load() (Config, error) {
 		SonarrAPIKey:     os.Getenv("SONARR_API_KEY"),
 		TautulliURL:      os.Getenv("TAUTULLI_URL"),
 		TautulliAPIKey:   os.Getenv("TAUTULLI_API_KEY"),
+		WebhookAddr:      os.Getenv("WEBHOOK_ADDR"),
+		WebhookPath:      os.Getenv("WEBHOOK_PATH"),
+		DiscordChannelID: os.Getenv("DISCORD_CHANNEL_ID"),
+		WebhookAuthToken: os.Getenv("WEBHOOK_AUTH_TOKEN"),
 	}
 
 	if c.JellyseerrURL == "" {
