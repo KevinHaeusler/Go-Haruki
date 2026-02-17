@@ -81,6 +81,21 @@ func Start(token, guildID string) error {
 			}
 			if channelID != "" {
 				content := fmt.Sprintf("%s: %s", p.Subject, p.Message)
+
+				// Try to find a Discord ID to ping
+				var pingID string
+				if p.Request != nil && p.Request.RequestedBySettingsDiscordID != "" {
+					pingID = p.Request.RequestedBySettingsDiscordID
+				} else if p.Issue != nil && p.Issue.ReportedBySettingsDiscordID != "" {
+					pingID = p.Issue.ReportedBySettingsDiscordID
+				} else if p.Comment != nil && p.Comment.CommentedBySettingsDiscordID != "" {
+					pingID = p.Comment.CommentedBySettingsDiscordID
+				}
+
+				if pingID != "" {
+					content = fmt.Sprintf("<@%s> %s", pingID, content)
+				}
+
 				_, _ = Session.ChannelMessageSend(channelID, content)
 			}
 		})

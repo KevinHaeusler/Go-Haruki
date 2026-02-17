@@ -21,14 +21,11 @@ func Start(addr, path, authToken string, onNotify func(NotificationPayload)) (*h
 
 		if authToken != "" {
 			authHeader := r.Header.Get("Authorization")
-			log.Printf("Webhook received request from %s. Method: %s, Auth Header: %s", r.RemoteAddr, r.Method, authHeader)
 			if authHeader != authToken && authHeader != ("Bearer "+authToken) {
 				log.Printf("Webhook auth failed. Expected: %s or Bearer %s, Got: %s", authToken, authToken, authHeader)
 				w.WriteHeader(http.StatusUnauthorized)
 				return
 			}
-		} else {
-			log.Printf("Webhook received request from %s. Method: %s, Auth enabled: false", r.RemoteAddr, r.Method)
 		}
 
 		defer r.Body.Close()
