@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strconv"
+	"strings"
 
 	"github.com/KevinHaeusler/go-haruki/bot/clients/radarr"
 	"github.com/KevinHaeusler/go-haruki/bot/clients/sonarr"
@@ -73,30 +75,98 @@ func Start(token, guildID string) error {
 	// Optionally start webhook server
 	if cfg.WebhookAddr != "" && cfg.WebhookPath != "" {
 		server, err := webhooks.Start(cfg.WebhookAddr, cfg.WebhookPath, cfg.WebhookAuthToken, func(p webhooks.NotificationPayload) {
+			log.Printf("[WEBHOOK] Received payload. Event: %q, Subject: %q, ChannelID: %q", p.Event, p.Subject, p.DiscordChannelID)
 			if Session == nil {
+				log.Printf("[WEBHOOK] Session is nil, skipping")
 				return
 			}
 			channelID := cfg.DiscordChannelID
 			if p.DiscordChannelID != "" {
 				channelID = p.DiscordChannelID
 			}
+			log.Printf("[WEBHOOK] Target ChannelID: %q", channelID)
 			if channelID != "" {
 				// Create the embed
 				embed := ui.WebhookNotificationEmbed(p)
+				log.Printf("[WEBHOOK] Embed created. Title: %q, Color: %x", embed.Title, embed.Color)
 
-				// Try to find a Discord ID to ping
-				var pingID string
+				// Try to find Discord IDs to ping
+				pingIDs := make(map[string]struct{})
+
+				// 1. Initial IDs from payload
 				if p.Request != nil && p.Request.RequestedBySettingsDiscordID != "" {
-					pingID = p.Request.RequestedBySettingsDiscordID
-				} else if p.Issue != nil && p.Issue.ReportedBySettingsDiscordID != "" {
-					pingID = p.Issue.ReportedBySettingsDiscordID
-				} else if p.Comment != nil && p.Comment.CommentedBySettingsDiscordID != "" {
-					pingID = p.Comment.CommentedBySettingsDiscordID
+					pingIDs[p.Request.RequestedBySettingsDiscordID] = struct{}{}
+				}
+				if p.Issue != nil && p.Issue.ReportedBySettingsDiscordID != "" {
+					pingIDs[p.Issue.ReportedBySettingsDiscordID] = struct{}{}
+				}
+				if p.Comment != nil && p.Comment.CommentedBySettingsDiscordID != "" {
+					pingIDs[p.Comment.CommentedBySettingsDiscordID] = struct{}{}
+				}
+
+				// 2. If it's a media event and we have Jellyseerr client, fetch all requesters
+				if ctx.Jelly != nil && p.Media != nil && (p.Event == "MEDIA_AVAILABLE" || p.Event == "MEDIA_APPROVED" || p.Event == "MEDIA_AUTO_APPROVED" || p.Event == "MEDIA_REQUESTED" || strings.Contains(strings.ToUpper(p.Event), "REQUEST")) {
+					mediaIDStr := p.Media.TMDBID
+					if mediaIDStr == "" {
+						mediaIDStr = p.Media.TVDBID
+					}
+					mediaID, _ := strconv.Atoi(mediaIDStr)
+					if mediaID > 0 {
+						detail, err := ctx.Jelly.GetDetail(context.Background(), p.Media.MediaType, mediaID)
+						if err == nil {
+							for _, req := range detail.MediaInfo.Requests {
+								user, err := ctx.Jelly.GetUserDetail(context.Background(), req.RequestedBy.ID)
+								if err == nil && user.Settings.DiscordID != "" {
+									pingIDs[user.Settings.DiscordID] = struct{}{}
+								}
+							}
+
+							// Also update embed fields with all requesters if it's available or multiple exist
+							if len(detail.MediaInfo.Requests) > 0 {
+								requester, watchers := detail.RequesterSummary()
+								allNames := append([]string{requester}, watchers...)
+
+								foundRequestedBy := false
+								foundTotalRequests := false
+
+								for i, field := range embed.Fields {
+									if field.Name == "Requested By" {
+										embed.Fields[i].Value = strings.Join(allNames, ", ")
+										foundRequestedBy = true
+									}
+									if field.Name == "Total Requests" {
+										embed.Fields[i].Value = fmt.Sprintf("%d", len(detail.MediaInfo.Requests))
+										foundTotalRequests = true
+									}
+								}
+
+								// If fields were not found (e.g. not added by WebhookNotificationEmbed), add them
+								if !foundRequestedBy && p.Request != nil {
+									embed.Fields = append(embed.Fields, &discordgo.MessageEmbedField{
+										Name:   "Requested By",
+										Value:  strings.Join(allNames, ", "),
+										Inline: true,
+									})
+								}
+								if !foundTotalRequests && p.Request != nil {
+									embed.Fields = append(embed.Fields, &discordgo.MessageEmbedField{
+										Name:   "Total Requests",
+										Value:  fmt.Sprintf("%d", len(detail.MediaInfo.Requests)),
+										Inline: true,
+									})
+								}
+							}
+						}
+					}
 				}
 
 				var content string
-				if pingID != "" {
-					content = fmt.Sprintf("<@%s>", pingID)
+				if len(pingIDs) > 0 {
+					var pings []string
+					for id := range pingIDs {
+						pings = append(pings, fmt.Sprintf("<@%s>", id))
+					}
+					content = strings.Join(pings, " ")
 				}
 
 				_, _ = Session.ChannelMessageSendComplex(channelID, &discordgo.MessageSend{

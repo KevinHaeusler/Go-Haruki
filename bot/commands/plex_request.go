@@ -3,6 +3,7 @@ package commands
 import (
 	"context"
 	"fmt"
+	"log"
 	"strconv"
 	"strings"
 	"time"
@@ -82,6 +83,7 @@ func PlexRequestHandler(ctx *appctx.Context, s *discordgo.Session, i *discordgo.
 
 	mt := strings.ToLower(strings.TrimSpace(util.GetOptString(i, "media-type")))
 	q := strings.TrimSpace(util.GetOptString(i, "media"))
+	log.Printf("[CMD] /plex-request invoked by %s (%s) guild=%s channel=%s media-type=%s query=%q", i.Member.User.Username, i.Member.User.ID, i.GuildID, i.ChannelID, mt, q)
 
 	if mt != "tv" && mt != "movie" {
 		return util.RespondEphemeral(s, i, "media-type must be `tv` or `movie`.")
@@ -102,11 +104,13 @@ func PlexRequestHandler(ctx *appctx.Context, s *discordgo.Session, i *discordgo.
 
 	results, err := ctx.Jelly.SearchSummary(callCtx, q, mt)
 	if err != nil {
+		log.Printf("[CMD] /plex-request search error for %s (%s): %v", i.Member.User.Username, i.Member.User.ID, err)
 		_, _ = s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
 			Content: util.PtrString("Search failed: " + err.Error()),
 		})
 		return nil
 	}
+	log.Printf("[CMD] /plex-request results=%d for query=%q", len(results), q)
 	if len(results) == 0 {
 		_, _ = s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
 			Content: util.PtrString(fmt.Sprintf("No results for `%s`.", q)),
@@ -152,6 +156,7 @@ func PlexRequestSelectHandler(ctx *appctx.Context, s *discordgo.Session, i *disc
 	_ = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseDeferredMessageUpdate,
 	})
+	log.Printf("[CMD] /plex-request select by %s (%s) guild=%s channel=%s", i.Member.User.Username, i.Member.User.ID, i.GuildID, i.ChannelID)
 
 	userID := i.Member.User.ID
 	sess := requestStore.Get(userID)
@@ -169,6 +174,7 @@ func PlexRequestSelectHandler(ctx *appctx.Context, s *discordgo.Session, i *disc
 	if err != nil {
 		return nil
 	}
+	log.Printf("[CMD] /plex-request selected mediaID=%d by %s (%s)", selectedID, i.Member.User.Username, i.Member.User.ID)
 
 	sess.SelectedID = selectedID
 	requestStore.Set(userID, *sess)
@@ -198,6 +204,7 @@ func PlexRequestConfirmHandler(ctx *appctx.Context, s *discordgo.Session, i *dis
 	_ = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseDeferredMessageUpdate,
 	})
+	log.Printf("[CMD] /plex-request confirm by %s (%s) guild=%s channel=%s", i.Member.User.Username, i.Member.User.ID, i.GuildID, i.ChannelID)
 
 	userID := i.Member.User.ID
 	sess := requestStore.Get(userID)
@@ -211,13 +218,16 @@ func PlexRequestConfirmHandler(ctx *appctx.Context, s *discordgo.Session, i *dis
 
 	detail, err := ctx.Jelly.GetDetail(callCtx, sess.MediaType, sess.SelectedID)
 	if err != nil {
+		log.Printf("[CMD] /plex-request confirm load details error: %v", err)
 		return editSessionMessage(s, sess, "Failed to load details: "+err.Error(), nil, nil)
 	}
 
 	status := detail.MediaInfo.Status
+	log.Printf("[CMD] /plex-request media status=%d mediaType=%s mediaID=%d", status, sess.MediaType, sess.SelectedID)
 
 	// 2 or 3 => already requested
 	if status == 2 || status == 3 {
+		log.Printf("[CMD] /plex-request already requested by someone else. user=%s (%s) mediaID=%d", i.Member.User.Username, i.Member.User.ID, sess.SelectedID)
 		embed := ui.JellyAlreadyRequestedEmbed(detail, sess.MediaType)
 
 		comps := []discordgo.MessageComponent{
@@ -232,6 +242,7 @@ func PlexRequestConfirmHandler(ctx *appctx.Context, s *discordgo.Session, i *dis
 
 	// 4 = partial availability -> show requester + notify button (NOT terminal)
 	if status == 4 {
+		log.Printf("[CMD] /plex-request partial availability for mediaID=%d", sess.SelectedID)
 		embed := ui.JellyPartialAvailabilityEmbed(detail, sess.MediaType)
 
 		comps := []discordgo.MessageComponent{
@@ -246,6 +257,7 @@ func PlexRequestConfirmHandler(ctx *appctx.Context, s *discordgo.Session, i *dis
 
 	// 5 = already available -> terminal
 	if status == 5 {
+		log.Printf("[CMD] /plex-request already available mediaID=%d", sess.SelectedID)
 		requestStore.Clear(userID)
 		embed := ui.JellyAvailabilityEmbed(detail, sess.MediaType, status)
 		return editSessionMessage(s, sess, "", []*discordgo.MessageEmbed{embed}, []discordgo.MessageComponent{})
@@ -253,13 +265,16 @@ func PlexRequestConfirmHandler(ctx *appctx.Context, s *discordgo.Session, i *dis
 
 	overseerrUserID, err := ctx.Jelly.DiscordUserToJellyseerrUserID(callCtx, userID)
 	if err != nil {
+		log.Printf("[CMD] /plex-request error mapping Discord->Jellyseerr for %s (%s): %v", i.Member.User.Username, i.Member.User.ID, err)
 		return editSessionMessage(s, sess, "Failed to link your Discord ID in Overseerr.", nil, nil)
 	}
 	if overseerrUserID == 0 {
+		log.Printf("[CMD] /plex-request no Jellyseerr link for %s (%s)", i.Member.User.Username, i.Member.User.ID)
 		return editSessionMessage(s, sess, "Your Discord ID is not linked in Overseerr.", nil, nil)
 	}
 
 	if detail.HasRequester(overseerrUserID) {
+		log.Printf("[CMD] /plex-request user already requester jellyUserID=%d discordUser=%s (%s) mediaID=%d", overseerrUserID, i.Member.User.Username, i.Member.User.ID, sess.SelectedID)
 		requestStore.Clear(userID)
 		embed := &discordgo.MessageEmbed{
 			Title:       "ℹ️ Already Requested",
@@ -270,9 +285,11 @@ func PlexRequestConfirmHandler(ctx *appctx.Context, s *discordgo.Session, i *dis
 
 	resp, err := ctx.Jelly.RequestMedia(callCtx, sess.MediaType, sess.SelectedID, overseerrUserID)
 	if err != nil {
+		log.Printf("[CMD] /plex-request request failed jellyUserID=%d mediaType=%s mediaID=%d err=%v", overseerrUserID, sess.MediaType, sess.SelectedID, err)
 		return editSessionMessage(s, sess, "Request failed: "+err.Error(), nil, nil)
 	}
 
+	log.Printf("[CMD] /plex-request sent by %s (%s) jellyUserID=%d mediaType=%s mediaID=%d", i.Member.User.Username, i.Member.User.ID, overseerrUserID, sess.MediaType, sess.SelectedID)
 	requestStore.Clear(userID)
 
 	total := resp.RequestedBy.RequestCount + 1
@@ -287,6 +304,7 @@ func PlexRequestAbortHandler(ctx *appctx.Context, s *discordgo.Session, i *disco
 	_ = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseDeferredMessageUpdate,
 	})
+	log.Printf("[CMD] /plex-request abort by %s (%s) guild=%s channel=%s", i.Member.User.Username, i.Member.User.ID, i.GuildID, i.ChannelID)
 
 	userID := i.Member.User.ID
 	sess := requestStore.Get(userID)

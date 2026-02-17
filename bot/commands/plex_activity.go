@@ -2,6 +2,7 @@ package commands
 
 import (
 	"context"
+	"log"
 	"time"
 
 	"github.com/bwmarrin/discordgo"
@@ -17,6 +18,7 @@ var PlexActivityCommand = &discordgo.ApplicationCommand{
 }
 
 func PlexActivityHandler(ctx *appctx.Context, s *discordgo.Session, i *discordgo.InteractionCreate) error {
+	log.Printf("[CMD] /plex-activity invoked by %s (%s) guild=%s channel=%s", i.Member.User.Username, i.Member.User.ID, i.GuildID, i.ChannelID)
 	if ctx.Tautulli == nil {
 		return util.RespondEphemeral(s, i, "Tautulli is not configured.")
 	}
@@ -33,6 +35,7 @@ func PlexActivityHandler(ctx *appctx.Context, s *discordgo.Session, i *discordgo
 
 	resp, err := ctx.Tautulli.GetActivity(callCtx)
 	if err != nil {
+		log.Printf("[CMD] /plex-activity error for %s (%s): %v", i.Member.User.Username, i.Member.User.ID, err)
 		_, _ = s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
 			Content: util.PtrString("❌ Failed to fetch Plex activity: " + err.Error()),
 		})
@@ -40,6 +43,7 @@ func PlexActivityHandler(ctx *appctx.Context, s *discordgo.Session, i *discordgo
 	}
 
 	sessions := resp.Response.Data.Sessions
+	log.Printf("[CMD] /plex-activity sessions=%d", len(sessions))
 	if len(sessions) == 0 {
 		_, _ = s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
 			Content: util.PtrString("No active Plex sessions right now."),
