@@ -17,6 +17,7 @@ import (
 	"github.com/KevinHaeusler/go-haruki/bot/config"
 	"github.com/KevinHaeusler/go-haruki/bot/handlers"
 	"github.com/KevinHaeusler/go-haruki/bot/httpx"
+	"github.com/KevinHaeusler/go-haruki/bot/ui"
 	"github.com/KevinHaeusler/go-haruki/bot/webhooks"
 )
 
@@ -80,7 +81,8 @@ func Start(token, guildID string) error {
 				channelID = p.DiscordChannelID
 			}
 			if channelID != "" {
-				content := fmt.Sprintf("%s: %s", p.Subject, p.Message)
+				// Create the embed
+				embed := ui.WebhookNotificationEmbed(p)
 
 				// Try to find a Discord ID to ping
 				var pingID string
@@ -92,11 +94,15 @@ func Start(token, guildID string) error {
 					pingID = p.Comment.CommentedBySettingsDiscordID
 				}
 
+				var content string
 				if pingID != "" {
-					content = fmt.Sprintf("<@%s> %s", pingID, content)
+					content = fmt.Sprintf("<@%s>", pingID)
 				}
 
-				_, _ = Session.ChannelMessageSend(channelID, content)
+				_, _ = Session.ChannelMessageSendComplex(channelID, &discordgo.MessageSend{
+					Content: content,
+					Embed:   embed,
+				})
 			}
 		})
 		if err != nil {
