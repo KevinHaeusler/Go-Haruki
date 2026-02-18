@@ -15,6 +15,99 @@ const (
 	MissingPosterURL = "https://via.placeholder.com/500x750?text=No+Poster"
 )
 
+func JellyRequestListEmbed(user *discordgo.User, requests []jellyseerr.UserRequest, page, totalPages, totalResults int) *discordgo.MessageEmbed {
+	embed := &discordgo.MessageEmbed{
+		Title: fmt.Sprintf("Overseerr Requests for %s", user.Username),
+		Description: "**########### Legend ###########**\n" +
+			"✅ = Available, ❔ = Unknown, ⌛ = Pending, 🔄 = Processing, ⚠️ = Partial, ❌ = Deleted\n\n" +
+			"Media that is 🔄 = Processing usually needs to be downloaded manually, try `/plex-fix-missing`\n" +
+			"Media that is ⚠️ = Partial usually means episodes are missing (can be running shows with future episodes)\n\n" +
+			"**Status — Title — Requested Date**\n",
+		Color: 0x00ADFF,
+		Thumbnail: &discordgo.MessageEmbedThumbnail{
+			URL: user.AvatarURL(""),
+		},
+	}
+
+	if len(requests) == 0 {
+		embed.Description += "\nNo requests found."
+		return embed
+	}
+
+	availMap := map[int]string{
+		1: "❔",  // UNKNOWN? (Python says 1: ❔)
+		2: "⌛",  // PENDING
+		3: "🔄",  // PROCESSING
+		4: "⚠️", // PARTIAL
+		5: "✅",  // AVAILABLE
+		6: "❌",  // DELETED
+	}
+
+	var sb strings.Builder
+	sb.WriteString(embed.Description)
+
+	for _, r := range requests {
+		// statusEmoji is based on media status, not request status
+		statusEmoji := availMap[r.Media.Status]
+		if statusEmoji == "" {
+			statusEmoji = fmt.Sprintf("%d", r.Media.Status)
+		}
+
+		title := r.Title
+		if title == "" {
+			title = r.Media.Title
+		}
+		if title == "" {
+			title = r.Media.Name
+		}
+		if title == "" && len(r.Media.Requests) > 0 {
+			title = r.Media.Requests[0]
+		}
+		if title == "" {
+			title = "Unknown Title"
+		}
+
+		// Ensure title doesn't contain the year already if we're about to add it
+		title = strings.TrimSpace(title)
+
+		year := ""
+		if len(r.Media.ReleaseDate) >= 4 {
+			year = r.Media.ReleaseDate[:4]
+		}
+
+		displayTitle := title
+		if year != "" && !strings.Contains(title, "("+year+")") {
+			displayTitle = fmt.Sprintf("%s (%s)", title, year)
+		}
+
+		created := r.CreatedAt.Format("02.01.06")
+
+		mediaType := r.Type
+		if mediaType == "" {
+			mediaType = r.Media.MediaType
+		}
+		typeLabel := ""
+		if strings.EqualFold(mediaType, "movie") {
+			typeLabel = "[Movie] "
+		} else if strings.EqualFold(mediaType, "tv") {
+			typeLabel = "[TV] "
+		}
+
+		line := fmt.Sprintf("%s — %s**%s** — %s\n", statusEmoji, typeLabel, displayTitle, created)
+		if len(sb.String())+len(line) > 4000 {
+			break
+		}
+		sb.WriteString(line)
+	}
+
+	embed.Description = sb.String()
+	embed.Footer = &discordgo.MessageEmbedFooter{
+		Text: fmt.Sprintf("Page %d of %d (Total: %d)", page, totalPages, totalResults),
+	}
+
+	return embed
+}
+
 func JellyResultListEmbed(query string) *discordgo.MessageEmbed {
 	return &discordgo.MessageEmbed{
 		Title:       "🔎 Jellyseerr Search",

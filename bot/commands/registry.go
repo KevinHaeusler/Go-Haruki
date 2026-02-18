@@ -17,6 +17,7 @@ var Definitions = []*discordgo.ApplicationCommand{
 	JellyLinkCommand,
 	PlexActivityCommand,
 	PlexFixMissingCommand,
+	GetRequestsCommand,
 }
 
 var Handlers = map[string]Handler{
@@ -26,6 +27,7 @@ var Handlers = map[string]Handler{
 	JellyLinkCommand.Name:      JellyLinkHandler,
 	PlexActivityCommand.Name:   PlexActivityHandler,
 	PlexFixMissingCommand.Name: PlexFixMissingHandler,
+	GetRequestsCommand.Name:    GetRequestsHandler,
 }
 
 // ComponentHandlers CustomID -> handler
@@ -38,6 +40,9 @@ var ComponentHandlers = map[string]ComponentHandler{
 	JellyLinkAbortID:            JellyLinkAbortHandler,
 	JellyLinkPrevID:             JellyLinkPrevHandler,
 	JellyLinkNextID:             JellyLinkNextHandler,
+	GetRequestsPrevID:           GetRequestsPrevHandler,
+	GetRequestsNextID:           GetRequestsNextHandler,
+	GetRequestsAbortID:          GetRequestsAbortHandler,
 	PlexFixMissingPageNext:      PlexFixMissingMediaPagingHandler,
 	PlexFixMissingPagePrev:      PlexFixMissingMediaPagingHandler,
 	PlexFixMissingSelectMedia:   PlexFixMissingMediaSelectHandler,

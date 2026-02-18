@@ -3,6 +3,7 @@ package jellyseerr
 import (
 	"context"
 	"fmt"
+	"time"
 )
 
 type UserSummary struct {
@@ -74,6 +75,108 @@ func (c *Client) GetUserDetail(ctx context.Context, id int) (UserDetail, error) 
 		return out, err
 	}
 	return out, nil
+}
+
+// UserRequest models the request data returned by /api/v1/user/{id}/requests
+type UserRequest struct {
+	ID        int       `json:"id"`
+	Status    int       `json:"status"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
+	Is4k      bool      `json:"is4k"`
+	Title     string    `json:"title"`
+	Type      string    `json:"type"` // "movie" or "tv"
+	Media     struct {
+		ID          int      `json:"id"`
+		TMDBID      int      `json:"tmdbId"`
+		TVDBID      int      `json:"tvdbId"`
+		Status      int      `json:"status"`
+		Requests    []string `json:"requests"`
+		Title       string   `json:"title"`
+		Name        string   `json:"name"`
+		MediaType   string   `json:"mediaType"`
+		ReleaseDate string   `json:"releaseDate"`
+		CreatedAt   string   `json:"createdAt"`
+		UpdatedAt   string   `json:"updatedAt"`
+	} `json:"media"`
+}
+
+type UserRequestsResponse struct {
+	PageInfo struct {
+		Page    int `json:"page"`
+		Pages   int `json:"pages"`
+		Results int `json:"results"`
+	} `json:"pageInfo"`
+	Results []UserRequest `json:"results"`
+}
+
+func (c *Client) GetUserRequests(ctx context.Context, userID int, includeFinished bool) ([]UserRequest, error) {
+	var allResults []UserRequest
+	take := 100
+	skip := 0
+
+	for {
+		u := fmt.Sprintf("%s/api/v1/user/%d/requests?take=%d&skip=%d", c.BaseURL, userID, take, skip)
+
+		var out UserRequestsResponse
+		if err := c.HTTP.DoJSON(ctx, "GET", u, c.headers(), nil, &out); err != nil {
+			return nil, err
+		}
+
+		if len(out.Results) == 0 {
+			break
+		}
+
+		for i, r := range out.Results {
+			if !includeFinished && r.Media.Status == 5 {
+				continue
+			}
+
+			// If title is missing, try to resolve it.
+			// Sometimes the list response is missing the title.
+			if r.Title == "" && r.Media.Title == "" && r.Media.Name == "" {
+				mediaType := r.Type
+				if mediaType == "" {
+					mediaType = r.Media.MediaType
+				}
+				mediaID := r.Media.TMDBID
+				if mediaType == "tv" && r.Media.TVDBID != 0 {
+					// Jellyseerr often uses TMDB for TV too, but let's be safe.
+					// Actually GetDetail uses TMDB ID for movie and TV (usually).
+				}
+
+				if mediaType != "" && mediaID != 0 {
+					detail, err := c.GetDetail(ctx, mediaType, mediaID)
+					if err == nil {
+						// Apply detail to the actual slice element
+						out.Results[i].Media.Title = detail.Title
+						out.Results[i].Media.Name = detail.Name
+						if out.Results[i].Media.ReleaseDate == "" {
+							out.Results[i].Media.ReleaseDate = detail.DisplayYear(mediaType)
+						}
+						// Use the newly fetched data for the current 'r' as well
+						r.Media.Title = detail.Title
+						r.Media.Name = detail.Name
+						r.Media.ReleaseDate = out.Results[i].Media.ReleaseDate
+					}
+				}
+			}
+
+			allResults = append(allResults, out.Results[i])
+		}
+
+		if len(out.Results) < take {
+			break
+		}
+		skip += take
+
+		// Safety cap to prevent infinite loops or excessive memory usage
+		if skip >= 2000 {
+			break
+		}
+	}
+
+	return allResults, nil
 }
 
 // UpdateUserDiscordID sets settings.discordId for a Jellyseerr user.
