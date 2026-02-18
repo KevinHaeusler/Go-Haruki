@@ -27,6 +27,8 @@ type RequestInfo struct {
 	RequestedByEmail              string `json:"requestedBy_email"`
 	RequestedByUsername           string `json:"requestedBy_username"`
 	RequestedByAvatar             string `json:"requestedBy_avatar"`
+	RequestedByID                 string `json:"requestedBy_id"`
+	RequestedByRequestCount       string `json:"requestedBy_requestCount"`
 	RequestedBySettingsDiscordID  string `json:"requestedBy_settings_discordId"`
 	RequestedBySettingsTelegramID string `json:"requestedBy_settings_telegramChatId"`
 }
@@ -38,6 +40,8 @@ type IssueInfo struct {
 	ReportedByEmail              string `json:"reportedBy_email"`
 	ReportedByUsername           string `json:"reportedBy_username"`
 	ReportedByAvatar             string `json:"reportedBy_avatar"`
+	ReportedByID                 string `json:"reportedBy_id"`
+	ReportedByRequestCount       string `json:"reportedBy_requestCount"`
 	ReportedBySettingsDiscordID  string `json:"reportedBy_settings_discordId"`
 	ReportedBySettingsTelegramID string `json:"reportedBy_settings_telegramChatId"`
 }
@@ -47,6 +51,8 @@ type CommentInfo struct {
 	CommentedByEmail              string `json:"commentedBy_email"`
 	CommentedByUsername           string `json:"commentedBy_username"`
 	CommentedByAvatar             string `json:"commentedBy_avatar"`
+	CommentedByID                 string `json:"commentedBy_id"`
+	CommentedByRequestCount       string `json:"commentedBy_requestCount"`
 	CommentedBySettingsDiscordID  string `json:"commentedBy_settings_discordId"`
 	CommentedBySettingsTelegramID string `json:"commentedBy_settings_telegramChatId"`
 }

@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"log"
 	"strings"
 
 	"github.com/KevinHaeusler/go-haruki/bot/webhooks"
@@ -9,7 +10,7 @@ import (
 )
 
 func WebhookNotificationEmbed(p webhooks.NotificationPayload) *discordgo.MessageEmbed {
-	fmt.Printf("[EMBED] Generating embed. Event: %q, Subject: %q\n", p.Event, p.Subject)
+	log.Printf("[EMBED] Generating embed. Event: %q, Subject: %q", p.Event, p.Subject)
 	embed := &discordgo.MessageEmbed{
 		Title:       p.Subject,
 		Description: p.Message,
@@ -65,10 +66,14 @@ func WebhookNotificationEmbed(p webhooks.NotificationPayload) *discordgo.Message
 			Inline: true,
 		})
 
-		// Total Requests (if provided via extras like total_requests/request_count)
+		// Total Requests (if provided via payload or extras like total_requests/request_count)
 		v, ok := findExtraValue(p.Extra, "total_requests", "request_count", "totalRequests")
 		if !ok || strings.TrimSpace(v) == "" {
-			v = "—"
+			if p.Request != nil && strings.TrimSpace(p.Request.RequestedByRequestCount) != "" {
+				v = p.Request.RequestedByRequestCount
+			} else {
+				v = "—"
+			}
 		}
 		embed.Fields = append(embed.Fields, &discordgo.MessageEmbedField{
 			Name:   "Total Requests",
@@ -85,55 +90,55 @@ func WebhookNotificationEmbed(p webhooks.NotificationPayload) *discordgo.Message
 	}
 
 	// Set color based on event type
-	fmt.Printf("[EMBED] Event for color: %q\n", p.Event)
+	log.Printf("[EMBED] Event for color: %q", p.Event)
 	eventUpper := strings.ToUpper(p.Event)
 	switch {
 	case eventUpper == "MEDIA_AVAILABLE" || strings.Contains(eventUpper, "NOW AVAILABLE"):
-		fmt.Println("[EMBED] Case MEDIA_AVAILABLE")
+		log.Println("[EMBED] Case MEDIA_AVAILABLE")
 		embed.Color = 0x2ecc71 // Green
 		embed.Author = &discordgo.MessageEmbedAuthor{Name: "✅ Media Available"}
 	case eventUpper == "MEDIA_REQUESTED" || strings.Contains(eventUpper, "NEW REQUEST") || strings.Contains(eventUpper, "MEDIA REQUESTED"):
-		fmt.Println("[EMBED] Case MEDIA_REQUESTED")
+		log.Println("[EMBED] Case MEDIA_REQUESTED")
 		embed.Color = 0x9c5db3 // Purple
 		embed.Author = &discordgo.MessageEmbedAuthor{Name: "📥 New Request"}
 	case eventUpper == "MEDIA_PENDING" || strings.Contains(eventUpper, "PENDING APPROVAL"):
-		fmt.Println("[EMBED] Case MEDIA_PENDING")
+		log.Println("[EMBED] Case MEDIA_PENDING")
 		embed.Color = 0xe67e22 // Orange
 		embed.Author = &discordgo.MessageEmbedAuthor{Name: "⏳ Pending Approval"}
 	case eventUpper == "MEDIA_APPROVED" || strings.Contains(eventUpper, "REQUEST APPROVED"):
-		fmt.Println("[EMBED] Case MEDIA_APPROVED")
+		log.Println("[EMBED] Case MEDIA_APPROVED")
 		embed.Color = 0x2ecc71 // Green
 		embed.Author = &discordgo.MessageEmbedAuthor{Name: "✅ Request Approved"}
 	case eventUpper == "MEDIA_DECLINED" || strings.Contains(eventUpper, "REQUEST DECLINED"):
-		fmt.Println("[EMBED] Case MEDIA_DECLINED")
+		log.Println("[EMBED] Case MEDIA_DECLINED")
 		embed.Color = 0xe74c3c // Red
 		embed.Author = &discordgo.MessageEmbedAuthor{Name: "❌ Request Declined"}
 	case eventUpper == "MEDIA_FAILED" || strings.Contains(eventUpper, "REQUEST FAILED"):
-		fmt.Println("[EMBED] Case MEDIA_FAILED")
+		log.Println("[EMBED] Case MEDIA_FAILED")
 		embed.Color = 0xe74c3c // Red
 		embed.Author = &discordgo.MessageEmbedAuthor{Name: "❌ Request Failed"}
 	case eventUpper == "MEDIA_AUTO_APPROVED" || strings.Contains(eventUpper, "REQUEST AUTO-APPROVED"):
-		fmt.Println("[EMBED] Case MEDIA_AUTO_APPROVED")
+		log.Println("[EMBED] Case MEDIA_AUTO_APPROVED")
 		embed.Color = 0x2ecc71 // Green
 		embed.Author = &discordgo.MessageEmbedAuthor{Name: "✅ Request Auto-Approved"}
 	case eventUpper == "ISSUE_REPORTED" || strings.Contains(eventUpper, "ISSUE REPORTED"):
-		fmt.Println("[EMBED] Case ISSUE_REPORTED")
+		log.Println("[EMBED] Case ISSUE_REPORTED")
 		embed.Color = 0xe67e22 // Orange
 		embed.Author = &discordgo.MessageEmbedAuthor{Name: "⚠️ Issue Reported"}
 	case eventUpper == "ISSUE_COMMENT" || strings.Contains(eventUpper, "NEW COMMENT"):
-		fmt.Println("[EMBED] Case ISSUE_COMMENT")
+		log.Println("[EMBED] Case ISSUE_COMMENT")
 		embed.Color = 0x3498db // Blue
 		embed.Author = &discordgo.MessageEmbedAuthor{Name: "💬 New Comment"}
 	case eventUpper == "ISSUE_RESOLVED" || strings.Contains(eventUpper, "ISSUE RESOLVED"):
-		fmt.Println("[EMBED] Case ISSUE_RESOLVED")
+		log.Println("[EMBED] Case ISSUE_RESOLVED")
 		embed.Color = 0x2ecc71 // Green
 		embed.Author = &discordgo.MessageEmbedAuthor{Name: "✅ Issue Resolved"}
 	case eventUpper == "ISSUE_REOPENED" || strings.Contains(eventUpper, "ISSUE REOPENED"):
-		fmt.Println("[EMBED] Case ISSUE_REOPENED")
+		log.Println("[EMBED] Case ISSUE_REOPENED")
 		embed.Color = 0xe67e22 // Orange
 		embed.Author = &discordgo.MessageEmbedAuthor{Name: "⚠️ Issue Reopened"}
 	default:
-		fmt.Printf("[EMBED] Unhandled event: %q, keeping default color\n", p.Event)
+		log.Printf("[EMBED] Unhandled event: %q, keeping default color", p.Event)
 	}
 
 	// Plex link support in footer (if provided via extras as plex_url/plex_link)

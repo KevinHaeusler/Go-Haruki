@@ -6,6 +6,8 @@ import (
 	"log"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/KevinHaeusler/go-haruki/bot/clients/radarr"
 	"github.com/KevinHaeusler/go-haruki/bot/clients/sonarr"
@@ -25,6 +27,43 @@ import (
 
 var Session *discordgo.Session
 var webhookServerStop func()
+
+// dedupe recent webhook notifications
+var (
+	recentWebhookMu  sync.Mutex
+	recentWebhookMap = make(map[string]time.Time)
+)
+
+func webhookKey(p webhooks.NotificationPayload) string {
+	event := strings.ToUpper(strings.TrimSpace(p.Event))
+	subject := strings.ToUpper(strings.TrimSpace(p.Subject))
+	mediaID := ""
+	mediaType := ""
+	if p.Media != nil {
+		mediaID = strings.TrimSpace(p.Media.TMDBID)
+		if mediaID == "" {
+			mediaID = strings.TrimSpace(p.Media.TVDBID)
+		}
+		mediaType = strings.ToUpper(strings.TrimSpace(p.Media.MediaType))
+	}
+	return fmt.Sprintf("%s|%s|%s|%s", event, mediaType, mediaID, subject)
+}
+
+func suppressIfRecent(p webhooks.NotificationPayload, window time.Duration) bool {
+	k := webhookKey(p)
+	now := time.Now()
+	recentWebhookMu.Lock()
+	defer recentWebhookMu.Unlock()
+	if ts, ok := recentWebhookMap[k]; ok {
+		if now.Sub(ts) < window {
+			log.Printf("[WEBHOOK] Suppression matched for key: %q (last seen: %v ago)", k, now.Sub(ts).Round(time.Millisecond))
+			return true
+		}
+	}
+	recentWebhookMap[k] = now
+	log.Printf("[WEBHOOK] No suppression for key: %q", k)
+	return false
+}
 
 func Start(token, guildID string) error {
 	cfg, err := config.Load()
@@ -86,9 +125,86 @@ func Start(token, guildID string) error {
 			}
 			log.Printf("[WEBHOOK] Target ChannelID: %q", channelID)
 			if channelID != "" {
+				// De-duplicate bursts of identical webhooks (same event/media) for 30s
+				if suppressIfRecent(p, 30*time.Second) {
+					log.Printf("[WEBHOOK] Suppressed duplicate notification: %s", webhookKey(p))
+					return
+				}
+
 				// Create the embed
 				embed := ui.WebhookNotificationEmbed(p)
 				log.Printf("[WEBHOOK] Embed created. Title: %q, Color: %x", embed.Title, embed.Color)
+
+				// If we can resolve the requester Discord user to a Jellyseerr user, fetch
+				// their total request count from Jellyseerr and display it in the embed.
+				if ctx.Jelly != nil {
+					var jellyID int
+					var totalCount string
+
+					// Priority:
+					// 1. Request payload (if count is available)
+					// 2. Resolve via Discord ID and fetch from API
+
+					if p.Request != nil {
+						totalCount = p.Request.RequestedByRequestCount
+						if id, err := strconv.Atoi(p.Request.RequestedByID); err == nil {
+							jellyID = id
+						}
+					} else if p.Issue != nil {
+						totalCount = p.Issue.ReportedByRequestCount
+						if id, err := strconv.Atoi(p.Issue.ReportedByID); err == nil {
+							jellyID = id
+						}
+					} else if p.Comment != nil {
+						totalCount = p.Comment.CommentedByRequestCount
+						if id, err := strconv.Atoi(p.Comment.CommentedByID); err == nil {
+							jellyID = id
+						}
+					}
+
+					if strings.TrimSpace(totalCount) == "" || totalCount == "0" {
+						// Try fetching from API if we have a Discord ID but no count in payload
+						var discordID string
+						if p.Request != nil {
+							discordID = p.Request.RequestedBySettingsDiscordID
+						} else if p.Issue != nil {
+							discordID = p.Issue.ReportedBySettingsDiscordID
+						} else if p.Comment != nil {
+							discordID = p.Comment.CommentedBySettingsDiscordID
+						}
+
+						if discordID != "" {
+							if jid, err := ctx.Jelly.DiscordUserToJellyseerrUserID(context.Background(), discordID); err == nil && jid > 0 {
+								jellyID = jid
+							}
+						}
+
+						if jellyID > 0 {
+							if total, err := ctx.Jelly.GetUserRequestTotal(context.Background(), jellyID); err == nil {
+								totalCount = fmt.Sprintf("%d", total)
+							}
+						}
+					}
+
+					if strings.TrimSpace(totalCount) != "" && totalCount != "—" {
+						// Update or insert the Total Requests field
+						updated := false
+						for i, f := range embed.Fields {
+							if f != nil && f.Name == "Total Requests" {
+								embed.Fields[i].Value = totalCount
+								updated = true
+								break
+							}
+						}
+						if !updated {
+							embed.Fields = append(embed.Fields, &discordgo.MessageEmbedField{
+								Name:   "Total Requests",
+								Value:  totalCount,
+								Inline: true,
+							})
+						}
+					}
+				}
 
 				// Try to find Discord IDs to ping
 				pingIDs := make(map[string]struct{})
@@ -127,31 +243,19 @@ func Start(token, guildID string) error {
 								allNames := append([]string{requester}, watchers...)
 
 								foundRequestedBy := false
-								foundTotalRequests := false
 
 								for i, field := range embed.Fields {
 									if field.Name == "Requested By" {
 										embed.Fields[i].Value = strings.Join(allNames, ", ")
 										foundRequestedBy = true
 									}
-									if field.Name == "Total Requests" {
-										embed.Fields[i].Value = fmt.Sprintf("%d", len(detail.MediaInfo.Requests))
-										foundTotalRequests = true
-									}
 								}
 
-								// If fields were not found (e.g. not added by WebhookNotificationEmbed), add them
+								// If field was not found (e.g. not added by WebhookNotificationEmbed), add it
 								if !foundRequestedBy && p.Request != nil {
 									embed.Fields = append(embed.Fields, &discordgo.MessageEmbedField{
 										Name:   "Requested By",
 										Value:  strings.Join(allNames, ", "),
-										Inline: true,
-									})
-								}
-								if !foundTotalRequests && p.Request != nil {
-									embed.Fields = append(embed.Fields, &discordgo.MessageEmbedField{
-										Name:   "Total Requests",
-										Value:  fmt.Sprintf("%d", len(detail.MediaInfo.Requests)),
 										Inline: true,
 									})
 								}
