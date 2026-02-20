@@ -186,7 +186,7 @@ func Start(token, guildID string) error {
 						}
 					}
 
-					if strings.TrimSpace(totalCount) != "" && totalCount != "—" {
+					if strings.TrimSpace(totalCount) != "" && totalCount != "—" && totalCount != "0" {
 						// Update or insert the Total Requests field
 						updated := false
 						for i, f := range embed.Fields {

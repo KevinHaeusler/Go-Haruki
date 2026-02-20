@@ -27,10 +27,22 @@ func WebhookNotificationEmbed(p webhooks.NotificationPayload) *discordgo.Message
 	if p.Media != nil {
 		var mediaDetails string
 		if p.Media.TMDBID != "" {
-			mediaDetails += fmt.Sprintf("**TMDB ID:** %s\n", p.Media.TMDBID)
+			tmdbURL := ""
+			if strings.ToLower(p.Media.MediaType) == "movie" {
+				tmdbURL = fmt.Sprintf("https://www.themoviedb.org/movie/%s", p.Media.TMDBID)
+			} else if strings.ToLower(p.Media.MediaType) == "tv" {
+				tmdbURL = fmt.Sprintf("https://www.themoviedb.org/tv/%s", p.Media.TMDBID)
+			}
+
+			if tmdbURL != "" {
+				mediaDetails += fmt.Sprintf("**TMDB ID:** [%s](%s)\n", p.Media.TMDBID, tmdbURL)
+			} else {
+				mediaDetails += fmt.Sprintf("**TMDB ID:** %s\n", p.Media.TMDBID)
+			}
 		}
 		if p.Media.TVDBID != "" {
-			mediaDetails += fmt.Sprintf("**TVDB ID:** %s\n", p.Media.TVDBID)
+			tvdbURL := fmt.Sprintf("https://www.thetvdb.com/dereferrer/series/%s", p.Media.TVDBID)
+			mediaDetails += fmt.Sprintf("**TVDB ID:** [%s](%s)\n", p.Media.TVDBID, tvdbURL)
 		}
 		if p.Media.Status != "" {
 			mediaDetails += fmt.Sprintf("**Status:** %s\n", p.Media.Status)
@@ -68,18 +80,20 @@ func WebhookNotificationEmbed(p webhooks.NotificationPayload) *discordgo.Message
 
 		// Total Requests (if provided via payload or extras like total_requests/request_count)
 		v, ok := findExtraValue(p.Extra, "total_requests", "request_count", "totalRequests")
-		if !ok || strings.TrimSpace(v) == "" {
-			if p.Request != nil && strings.TrimSpace(p.Request.RequestedByRequestCount) != "" {
+		if !ok || strings.TrimSpace(v) == "" || v == "0" {
+			if p.Request != nil && strings.TrimSpace(p.Request.RequestedByRequestCount) != "" && p.Request.RequestedByRequestCount != "0" {
 				v = p.Request.RequestedByRequestCount
 			} else {
 				v = "—"
 			}
 		}
-		embed.Fields = append(embed.Fields, &discordgo.MessageEmbedField{
-			Name:   "Total Requests",
-			Value:  v,
-			Inline: true,
-		})
+		if v != "—" {
+			embed.Fields = append(embed.Fields, &discordgo.MessageEmbedField{
+				Name:   "Total Requests",
+				Value:  v,
+				Inline: true,
+			})
+		}
 	} else if p.Issue != nil {
 		// Issue flow keeps the reporter info
 		embed.Fields = append(embed.Fields, &discordgo.MessageEmbedField{

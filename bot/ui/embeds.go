@@ -123,9 +123,30 @@ func JellyDetailEmbed(d jellyseerr.MediaDetail, mediaType string) *discordgo.Mes
 		poster = TMDBImageURL + d.PosterPath
 	}
 
+	var description strings.Builder
+	if d.Overview != "" {
+		description.WriteString(Truncate(d.Overview, 2000))
+		description.WriteString("\n\n")
+	}
+
+	if d.ID != 0 {
+		tmdbURL := ""
+		if strings.ToLower(mediaType) == "movie" {
+			tmdbURL = fmt.Sprintf("https://www.themoviedb.org/movie/%d", d.ID)
+		} else if strings.ToLower(mediaType) == "tv" {
+			tmdbURL = fmt.Sprintf("https://www.themoviedb.org/tv/%d", d.ID)
+		}
+
+		if tmdbURL != "" {
+			description.WriteString(fmt.Sprintf("**TMDB ID:** [%d](%s)\n", d.ID, tmdbURL))
+		} else {
+			description.WriteString(fmt.Sprintf("**TMDB ID:** %d\n", d.ID))
+		}
+	}
+
 	return &discordgo.MessageEmbed{
 		Title:       title,
-		Description: Truncate(d.Overview, 4000),
+		Description: description.String(),
 		Thumbnail:   &discordgo.MessageEmbedThumbnail{URL: poster},
 	}
 }

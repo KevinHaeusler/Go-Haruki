@@ -99,7 +99,7 @@ func PlexRequestHandler(ctx *appctx.Context, s *discordgo.Session, i *discordgo.
 		return err
 	}
 
-	callCtx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
+	callCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
 	results, err := ctx.Jelly.SearchSummary(callCtx, q, mt)
@@ -179,7 +179,7 @@ func PlexRequestSelectHandler(ctx *appctx.Context, s *discordgo.Session, i *disc
 	sess.SelectedID = selectedID
 	requestStore.Set(userID, *sess)
 
-	callCtx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
+	callCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
 	detail, err := ctx.Jelly.GetDetail(callCtx, sess.MediaType, sess.SelectedID)
@@ -213,7 +213,7 @@ func PlexRequestConfirmHandler(ctx *appctx.Context, s *discordgo.Session, i *dis
 	}
 	requestStore.Touch(userID)
 
-	callCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	callCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
 	detail, err := ctx.Jelly.GetDetail(callCtx, sess.MediaType, sess.SelectedID)
@@ -385,7 +385,7 @@ func PlexRequestNotifyHandler(ctx *appctx.Context, s *discordgo.Session, i *disc
 	}
 	requestStore.Touch(userID)
 
-	callCtx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
+	callCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
 	overID, err := ctx.Jelly.DiscordUserToJellyseerrUserID(callCtx, userID)

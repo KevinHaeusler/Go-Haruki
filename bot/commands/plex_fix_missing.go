@@ -2,6 +2,7 @@ package commands
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -142,7 +143,7 @@ func PlexFixMissingHandler(ctx *appctx.Context, s *discordgo.Session, i *discord
 		return err
 	}
 
-	callCtx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
+	callCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
 	var results []map[string]any
@@ -345,7 +346,7 @@ func PlexFixMissingMediaSelectHandler(ctx *appctx.Context, s *discordgo.Session,
 		return pfmShowMovieReleases(ctx, s, sess)
 	}
 	// TV: fetch episodes
-	callCtx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
+	callCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	seriesID := fmt.Sprintf("%v", item["id"])
 	var eps []map[string]any
@@ -473,11 +474,50 @@ func PlexFixMissingEpisodeSelectHandler(ctx *appctx.Context, s *discordgo.Sessio
 		return nil
 	}
 	pfmStore.Touch(i.Member.User.ID)
+
+	// Show "Now Searching"
+	searchingEmbeds := []*discordgo.MessageEmbed{ui.PlexFixMissingSearchingEmbed()}
+	_, _ = s.ChannelMessageEditComplex(&discordgo.MessageEdit{
+		ID:         sess.MessageID,
+		Channel:    sess.ChannelID,
+		Embeds:     &searchingEmbeds,
+		Components: &[]discordgo.MessageComponent{}, // clear components
+	})
+
 	epID := i.MessageComponentData().Values[0]
-	callCtx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
+	callCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	var releases []map[string]any
 	if err := ctx.Sonarr.Get(callCtx, "release?episodeId="+epID, &releases); err != nil {
+		// If the fetch timed out (after 60s), abort the session with a friendly message
+		if errors.Is(err, context.DeadlineExceeded) || strings.Contains(strings.ToLower(err.Error()), "timeout") {
+			seriesTitle, _ := sess.SelectedMedia["title"].(string)
+			epDisplay := "Episode"
+			for _, ep := range sess.CurrentSeasonEps {
+				if fmt.Sprintf("%v", ep["id"]) == epID {
+					seF, _ := ep["seasonNumber"].(float64)
+					epF, _ := ep["episodeNumber"].(float64)
+					title, _ := ep["title"].(string)
+					epDisplay = fmt.Sprintf("S%02dE%02d - %s", int(seF), int(epF), title)
+					break
+				}
+			}
+			msg := fmt.Sprintf("No Downloads found for Media - %s - %s", seriesTitle, epDisplay)
+			abortEmbed := &discordgo.MessageEmbed{
+				Title:       "No results",
+				Description: msg,
+				Color:       0xff0000,
+			}
+			abortEmbeds := []*discordgo.MessageEmbed{abortEmbed}
+			_, _ = s.ChannelMessageEditComplex(&discordgo.MessageEdit{
+				ID:         sess.MessageID,
+				Channel:    sess.ChannelID,
+				Embeds:     &abortEmbeds,
+				Components: &[]discordgo.MessageComponent{},
+			})
+			pfmStore.Clear(sess.UserID)
+			return nil
+		}
 		_, _ = s.ChannelMessageEditComplex(&discordgo.MessageEdit{ID: sess.MessageID, Channel: sess.ChannelID, Content: util.PtrString("Fetch releases failed: " + err.Error())})
 		return nil
 	}
@@ -487,11 +527,39 @@ func PlexFixMissingEpisodeSelectHandler(ctx *appctx.Context, s *discordgo.Sessio
 }
 
 func pfmShowMovieReleases(ctx *appctx.Context, s *discordgo.Session, sess *pfmSession) error {
-	callCtx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
+	// Show "Now Searching"
+	searchingEmbeds := []*discordgo.MessageEmbed{ui.PlexFixMissingSearchingEmbed()}
+	_, _ = s.ChannelMessageEditComplex(&discordgo.MessageEdit{
+		ID:         sess.MessageID,
+		Channel:    sess.ChannelID,
+		Embeds:     &searchingEmbeds,
+		Components: &[]discordgo.MessageComponent{}, // clear components
+	})
+
+	callCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	movieID := fmt.Sprintf("%v", sess.SelectedMedia["id"])
 	var releases []map[string]any
 	if err := ctx.Radarr.Get(callCtx, "release?movieId="+movieID, &releases); err != nil {
+		// If the fetch timed out (after 60s), abort the session with a friendly message
+		if errors.Is(err, context.DeadlineExceeded) || strings.Contains(strings.ToLower(err.Error()), "timeout") {
+			title, _ := sess.SelectedMedia["title"].(string)
+			msg := fmt.Sprintf("No files found for Media - %s", title)
+			abortEmbed := &discordgo.MessageEmbed{
+				Title:       "No results",
+				Description: msg,
+				Color:       0xff0000,
+			}
+			abortEmbeds := []*discordgo.MessageEmbed{abortEmbed}
+			_, _ = s.ChannelMessageEditComplex(&discordgo.MessageEdit{
+				ID:         sess.MessageID,
+				Channel:    sess.ChannelID,
+				Embeds:     &abortEmbeds,
+				Components: &[]discordgo.MessageComponent{},
+			})
+			pfmStore.Clear(sess.UserID)
+			return nil
+		}
 		_, _ = s.ChannelMessageEditComplex(&discordgo.MessageEdit{ID: sess.MessageID, Channel: sess.ChannelID, Content: util.PtrString("Fetch releases failed: " + err.Error())})
 		return nil
 	}
@@ -633,7 +701,7 @@ func PlexFixMissingApproveHandler(ctx *appctx.Context, s *discordgo.Session, i *
 		}(),
 		"protocol": rel["protocol"],
 	}
-	callCtx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
+	callCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	var out any
 	var err error

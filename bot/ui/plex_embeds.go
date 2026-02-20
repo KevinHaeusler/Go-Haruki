@@ -223,6 +223,14 @@ func PlexFixMissingReleaseInfoEmbed(rel map[string]any) *discordgo.MessageEmbed 
 	return embed
 }
 
+func PlexFixMissingSearchingEmbed() *discordgo.MessageEmbed {
+	return &discordgo.MessageEmbed{
+		Title:       "Searching...",
+		Description: "Fetching releases, please wait...",
+		Color:       0xf1c40f, // yellow-ish
+	}
+}
+
 func PlexFixMissingDownloadStartedEmbed(title string) *discordgo.MessageEmbed {
 	return &discordgo.MessageEmbed{
 		Title:       "Download Started",
